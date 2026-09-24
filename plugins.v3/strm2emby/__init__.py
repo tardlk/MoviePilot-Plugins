@@ -99,7 +99,7 @@ class Strm2Emby(_PluginBase):
     plugin_name = "Strm2Emby"
     plugin_desc = "使 MoviePilot 存储支持光鸭云盘，内置目录同步、手动上传与 LitePan 联动。"
     plugin_icon = "https://raw.githubusercontent.com/tardlk/MoviePilot-Plugins/main/icons/Strm2Emby.png"
-    plugin_version = "1.0.3"
+    plugin_version = "1.0.4"
     plugin_author = "tardlk"
     author_url = "https://github.com/tardlk"
     plugin_config_prefix = "strm2emby_"

@@ -4,7 +4,7 @@
 
 **把「光鸭云盘」接入 MoviePilot 存储，并内置目录同步、手动上传、上传记录与 LitePan 联动。**
 
-[![version](https://img.shields.io/badge/version-1.0.3-blue?style=flat-square)](https://github.com/tardlk/MoviePilot-Plugins/releases)
+[![version](https://img.shields.io/badge/version-1.0.4-blue?style=flat-square)](https://github.com/tardlk/MoviePilot-Plugins/releases)
 [![MoviePilot](https://img.shields.io/badge/MoviePilot-V3-6C63FF?style=flat-square)](https://github.com/jxxghp/MoviePilot)
 [![license](https://img.shields.io/badge/license-GPL--3.0-success?style=flat-square)](LICENSE)
 [![author](https://img.shields.io/badge/author-tardlk-0ea5e9?style=flat-square)](https://github.com/tardlk)
@@ -21,7 +21,7 @@
 | :-- | :-- |
 | 插件 ID | `Strm2Emby` |
 | 显示名称 | Strm2Emby |
-| 版本 | v1.0.3 |
+| 版本 | v1.0.4 |
 | 标签 | 存储、工具 |
 | 作者 | [tardlk](https://github.com/tardlk) |
 | 兼容 | MoviePilot **V3**（`system_version: ">=3.0.0"`，不兼容 V2） |

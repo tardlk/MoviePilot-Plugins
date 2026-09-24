@@ -49,6 +49,8 @@ class GuangYaClient:
 
     # 业务成功码（白名单）
     _SUCCESS_CODES = (0, 200, "0", "200")
+    # code 缺失时以 msg 判定的成功文案白名单（部分接口不返回 code）
+    _SUCCESS_MESSAGES = ("success", "ok")
     # 业务限流码
     _RATE_LIMIT_CODES = (354,)
     # 上传票据返回码：156 表示云端已完成（秒传）
@@ -294,16 +296,23 @@ class GuangYaClient:
 
         成功条件（满足其一）：
         - ``code`` 为约定的成功码（0 / 200 / "0" / "200"）；
-        - ``code`` 缺失且 ``success`` 显式为 True（部分接口用该字段表达结果）。
+        - ``code`` 缺失且 ``success`` 显式为 True（部分接口用该字段表达结果）；
+        - ``code`` 缺失且 ``msg`` 为明确的成功文案（如 ``success``）：
+          部分接口（如 ``file/get_file_list``）的成功响应只返回
+          ``{"msg": "success", "data": {...}}``，不带 ``code``。
 
-        不再使用「msg 不是 error/fail 即成功」的黑名单兜底：上游返回
-        ``{"msg": "文件不存在"}`` 这类中文错误文案时会被误判为成功。
+        仍不使用「msg 不是 error/fail 即成功」的宽松黑名单兜底，避免把
+        ``{"msg": "文件不存在"}`` 这类中文错误文案误判为成功。
         """
         code = envelope.get("code")
         if code in cls._SUCCESS_CODES:
             return True
-        if code is None and envelope.get("success") is True:
-            return True
+        if code is None:
+            if envelope.get("success") is True:
+                return True
+            message = str(envelope.get("msg") or envelope.get("message") or "").strip().lower()
+            if message in cls._SUCCESS_MESSAGES:
+                return True
         return False
 
     def _request_envelope(
