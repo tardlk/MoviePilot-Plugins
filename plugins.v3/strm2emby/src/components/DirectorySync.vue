@@ -28,6 +28,10 @@
         <div class="ds-hint">仅轮询模式下生效，默认 2 秒</div>
       </div>
       <div class="ds-item">
+        <v-switch v-model="form.sync_on_transfer" label="整理联动（整理成功后上传）" density="compact" hide-details color="primary" />
+        <div class="ds-hint">仅上传 MP「整理完成」后落入本地源目录的文件，最精准；建议与监控/Cron 并用</div>
+      </div>
+      <div class="ds-item">
         <v-text-field v-model="form.sync_source_dir" label="本地源目录" placeholder="/vol2/1000/Vol2/Media" density="compact" variant="outlined" hide-details class="ds-input" />
       </div>
       <div class="ds-item">
@@ -91,6 +95,7 @@ const form = reactive({
   sync_conflict: 'skip',
   sync_delete_source: false,
   sync_extensions: '',
+  sync_on_transfer: false,
 })
 const saving = ref(false)
 const syncing = ref(false)
@@ -124,6 +129,7 @@ function applyConfig(config = {}) {
   form.sync_conflict = config.sync_conflict || (config.sync_overwrite ? 'overwrite' : 'skip')
   form.sync_delete_source = Boolean(config.sync_delete_source)
   form.sync_extensions = config.sync_extensions || ''
+  form.sync_on_transfer = Boolean(config.sync_on_transfer)
 }
 
 watch(() => props.config, (value) => applyConfig(value), { immediate: true, deep: true })
@@ -145,6 +151,7 @@ async function save() {
         sync_conflict: form.sync_conflict,
         sync_delete_source: form.sync_delete_source,
         sync_extensions: form.sync_extensions,
+        sync_on_transfer: form.sync_on_transfer,
       }),
     })
     if (!result.success) {

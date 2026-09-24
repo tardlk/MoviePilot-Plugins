@@ -43,7 +43,7 @@ from fastapi import Depends
 from app import schemas
 from app.api.dependencies.auth import get_current_active_superuser
 from app.schemas import FileItem, StorageOperSelectionEventData
-from app.schemas.types import ChainEventType, StorageAction
+from app.schemas.types import ChainEventType, EventType, StorageAction
 from app.sdk.events import Event, eventmanager
 from app.sdk.logging import logger
 from app.sdk.network import RequestUtils
@@ -77,6 +77,10 @@ CONFLICT_CHOICES = (CONFLICT_SKIP, CONFLICT_OVERWRITE, CONFLICT_RENAME)
 TRIGGER_MANUAL = "manual"
 TRIGGER_SYNC = "sync"
 TRIGGER_WATCH = "watch"
+TRIGGER_TRANSFER = "transfer"
+
+# 整理联动去抖秒数：一批整理事件静默该时长后合并为一次上传
+_TRANSFER_DEBOUNCE = 5
 
 # 上传阶段标识（用于把「计算哈希」等阶段透传给前端）
 PHASE_HASHING = "hashing"
@@ -99,7 +103,7 @@ class Strm2Emby(_PluginBase):
     plugin_name = "Strm2Emby"
     plugin_desc = "使 MoviePilot 存储支持光鸭云盘，内置目录同步、手动上传与 LitePan 联动。"
     plugin_icon = "https://raw.githubusercontent.com/tardlk/MoviePilot-Plugins/main/icons/Strm2Emby.png"
-    plugin_version = "1.0.4"
+    plugin_version = "1.1.0"
     plugin_author = "tardlk"
     author_url = "https://github.com/tardlk"
     plugin_config_prefix = "strm2emby_"
@@ -167,6 +171,7 @@ class Strm2Emby(_PluginBase):
         self._sync_conflict = CONFLICT_SKIP
         self._sync_delete_source = False
         self._sync_extensions = ""
+        self._sync_on_transfer = False
 
         # 允许浏览/手动上传的本地根目录（逗号分隔，空表示不额外限制）
         self._fs_allowed_roots = ""
@@ -194,6 +199,10 @@ class Strm2Emby(_PluginBase):
         self._watch_stop: Optional[threading.Event] = None
         self._litepan_lock = threading.Lock()
         self._litepan_timer: Optional[threading.Timer] = None
+        # 整理联动：待上传文件去抖合并
+        self._transfer_lock = threading.Lock()
+        self._transfer_pending: Dict[str, float] = {}
+        self._transfer_timer: Optional[threading.Timer] = None
         self._progress_lock = threading.Lock()
 
         # 记录与进度
@@ -221,6 +230,7 @@ class Strm2Emby(_PluginBase):
         self._build_client()
         self._load_upload_history()
         self._reset_progress()
+        self._cancel_transfer_notify()
         self._cancel_litepan_notify()
         self._restart_watch()
 
@@ -268,6 +278,7 @@ class Strm2Emby(_PluginBase):
         self._sync_conflict = self._normalize_conflict(config.get("sync_conflict"))
         self._sync_delete_source = bool(config.get("sync_delete_source"))
         self._sync_extensions = (config.get("sync_extensions") or "").strip()
+        self._sync_on_transfer = bool(config.get("sync_on_transfer"))
 
         self._fs_allowed_roots = (config.get("fs_allowed_roots") or "").strip()
 
@@ -420,6 +431,7 @@ class Strm2Emby(_PluginBase):
             "sync_conflict": CONFLICT_SKIP,
             "sync_delete_source": False,
             "sync_extensions": "",
+            "sync_on_transfer": False,
             "fs_allowed_roots": "",
             "litepan_enabled": False,
             "litepan_base_url": "",
@@ -437,8 +449,9 @@ class Strm2Emby(_PluginBase):
         return []
 
     def stop_service(self):
-        """退出插件：停止目录监控线程与待发送的联动通知。"""
+        """退出插件：停止目录监控线程、整理联动去抖与待发送的联动通知。"""
         self._stop_watch()
+        self._cancel_transfer_notify()
         self._cancel_litepan_notify()
         self._reset_progress()
 
@@ -474,6 +487,7 @@ class Strm2Emby(_PluginBase):
             "sync_conflict": self._sync_conflict,
             "sync_delete_source": self._sync_delete_source,
             "sync_extensions": self._sync_extensions,
+            "sync_on_transfer": self._sync_on_transfer,
             "fs_allowed_roots": self._fs_allowed_roots,
             "litepan_enabled": self._litepan_enabled,
             "litepan_base_url": self._litepan_base_url,
@@ -547,6 +561,7 @@ class Strm2Emby(_PluginBase):
             ),
             "sync_delete_source": _as_bool("sync_delete_source"),
             "sync_extensions": _as_str("sync_extensions"),
+            "sync_on_transfer": _as_bool("sync_on_transfer"),
             "fs_allowed_roots": _as_str("fs_allowed_roots"),
             "litepan_enabled": _as_bool("litepan_enabled"),
             "litepan_base_url": _as_str("litepan_base_url").rstrip("/"),
@@ -604,6 +619,7 @@ class Strm2Emby(_PluginBase):
             "sync_conflict": self._sync_conflict,
             "sync_delete_source": self._sync_delete_source,
             "sync_extensions": self._sync_extensions,
+            "sync_on_transfer": self._sync_on_transfer,
             "fs_allowed_roots": self._fs_allowed_roots,
             "litepan_enabled": self._litepan_enabled,
             "litepan_base_url": self._litepan_base_url,
@@ -1210,6 +1226,186 @@ class Strm2Emby(_PluginBase):
         event_data: StorageOperSelectionEventData = event.event_data
         if event_data.storage == self._disk_name:
             event_data.storage_oper = self._guangya_api  # noqa: SLF001
+
+    @eventmanager.register(EventType.TransferComplete)
+    def transfer_complete(self, event: Event):
+        """
+        整理完成事件：把**整理成功后**落入本地媒体库的文件同步上传到光鸭。
+
+        仅处理成功整理、目标为本机本地路径、且位于「本地源目录」下的文件；
+        若整理目标本身就是光鸭存储（已在云端），跳过以免重复上传。
+        多个事件会去抖合并成一批，避免逐文件触发大量线程。
+        """
+        try:
+            if not (self._enabled and self._sync_enabled and self._sync_on_transfer):
+                return
+            data = event.event_data or {}
+            transferinfo = self._event_get(data, "transferinfo")
+            if transferinfo is None:
+                return
+            if not bool(self._event_get(transferinfo, "success", True)):
+                return
+            # 覆盖模式下判定「不覆盖」而放弃，属正常策略裁决，无新文件
+            if bool(self._event_get(transferinfo, "overwrite_skipped", False)):
+                return
+            source_root = Path(self._sync_source_dir) if self._sync_source_dir else None
+            if not source_root:
+                return
+            files: List[str] = []
+            for path, storage in self._collect_transfer_targets(data, transferinfo):
+                if storage and storage == self._disk_name:
+                    continue
+                target = Path(path)
+                if not target.is_absolute():
+                    continue
+                if target != source_root and source_root not in target.parents:
+                    continue
+                files.append(target.as_posix())
+            if not files:
+                return
+            self._schedule_transfer_upload(files)
+        except Exception as err:  # noqa: BLE001
+            logger.error(f"【Strm2Emby】整理联动处理失败: {err}")
+
+    @staticmethod
+    def _event_get(obj: Any, key: str, default: Any = None) -> Any:
+        """兼容 dict / 对象两种事件数据形态读取字段。"""
+        if obj is None:
+            return default
+        if isinstance(obj, dict):
+            return obj.get(key, default)
+        return getattr(obj, key, default)
+
+    def _collect_transfer_targets(
+        self, data: Any, transferinfo: Any
+    ) -> List[Tuple[str, Optional[str]]]:
+        """从整理事件中收集目标文件 (路径, storage) 列表，按路径去重。"""
+        targets: List[Tuple[str, Optional[str]]] = []
+        seen: set = set()
+
+        def _add(item: Any) -> None:
+            if item is None:
+                return
+            if isinstance(item, str):
+                path, storage = item, None
+            elif isinstance(item, dict):
+                path, storage = item.get("path"), item.get("storage")
+            else:
+                path, storage = getattr(item, "path", None), getattr(item, "storage", None)
+            if not path:
+                return
+            path = str(path)
+            if path in seen:
+                return
+            seen.add(path)
+            targets.append((path, storage))
+
+        # 优先整理结果里的目标文件，其次事件顶层 fileitem 兜底
+        _add(self._event_get(transferinfo, "target_item"))
+        files_new = self._event_get(transferinfo, "file_list_new") or []
+        if isinstance(files_new, (list, tuple, set)):
+            for item in files_new:
+                _add(item)
+        _add(self._event_get(data, "fileitem"))
+        return targets
+
+    def _schedule_transfer_upload(self, files: List[str]) -> None:
+        """把整理后的文件加入待上传集合，去抖合并后统一上传。"""
+        with self._transfer_lock:
+            for path in files:
+                self._transfer_pending[path] = time.time()
+            if self._transfer_timer is not None:
+                self._transfer_timer.cancel()
+            self._transfer_timer = threading.Timer(
+                _TRANSFER_DEBOUNCE, self._flush_transfer_upload
+            )
+            self._transfer_timer.daemon = True
+            self._transfer_timer.start()
+
+    def _cancel_transfer_notify(self) -> None:
+        """取消待执行的整理联动上传。"""
+        with self._transfer_lock:
+            if self._transfer_timer is not None:
+                self._transfer_timer.cancel()
+                self._transfer_timer = None
+            self._transfer_pending.clear()
+
+    def _flush_transfer_upload(self) -> None:
+        """去抖到期：批量上传整理后的文件（后台线程执行）。"""
+        with self._transfer_lock:
+            self._transfer_timer = None
+            files = [Path(p) for p in self._transfer_pending]
+            self._transfer_pending.clear()
+        if not files:
+            return
+        threading.Thread(
+            target=self._run_transfer_upload,
+            args=(files,),
+            name="Strm2EmbyTransferSync",
+            daemon=True,
+        ).start()
+
+    def _run_transfer_upload(self, files: List[Path]) -> None:
+        """后台批量上传整理后的文件（复用单文件同步逻辑）。"""
+        if not self._guangya_api:
+            logger.error("【Strm2Emby】整理联动上传失败：插件未初始化或未登录")
+            return
+        source_root = Path(self._sync_source_dir) if self._sync_source_dir else None
+        if not source_root:
+            return
+        stats = {"uploaded": 0, "skipped": 0, "failed": 0}
+        records: List[Dict[str, Any]] = []
+        try:
+            with self._sync_lock:
+                remote_root = self._prepare_remote()
+                if remote_root is None:
+                    return
+                targets = [item for item in files if item.is_file()]
+                self._begin_progress(TRIGGER_TRANSFER, len(targets), "整理联动上传中")
+                for local in targets:
+                    size = local.stat().st_size if local.is_file() else 0
+                    row = self._start_progress_item(local.name, local.as_posix(), size)
+                    result = self._sync_file(
+                        local,
+                        source_root,
+                        remote_root,
+                        set(),
+                        trigger=TRIGGER_TRANSFER,
+                        delete_source=False,
+                        on_progress=lambda percent, _row=row: self._update_progress_item(
+                            _row, percent=percent
+                        ),
+                        on_phase=lambda phase, _row=row: self._update_progress_item(
+                            _row, phase=phase
+                        ),
+                    )
+                    status = result.get("status", "failed")
+                    stats[status] = stats.get(status, 0) + 1
+                    self._update_progress_item(
+                        row,
+                        status=status,
+                        percent=100 if status == "uploaded" else row.get("percent", 0),
+                        remote=result.get("remote", ""),
+                        error=result.get("error", ""),
+                        flash=result.get("flash", False),
+                    )
+                    records.append(self._build_record(TRIGGER_TRANSFER, result))
+                    self._update_progress(
+                        uploaded=stats["uploaded"],
+                        skipped=stats["skipped"],
+                        failed=stats["failed"],
+                    )
+                self._finish_progress(stats, TRIGGER_TRANSFER)
+                logger.info(
+                    f"【Strm2Emby】整理联动完成：上传 {stats['uploaded']}，"
+                    f"跳过 {stats['skipped']}，失败 {stats['failed']}"
+                )
+        except Exception as err:  # noqa: BLE001
+            logger.error(f"【Strm2Emby】整理联动后台任务异常：{err}")
+        finally:
+            self._record_upload(records)
+            if stats["uploaded"] > 0:
+                self._schedule_litepan_notify()
 
     def _own_storage(self, storage: Optional[str]) -> bool:
         """判断条目/存储是否属于本插件管理的存储。"""

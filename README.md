@@ -4,7 +4,7 @@
 
 **把「光鸭云盘」接入 MoviePilot 存储，并内置目录同步、手动上传、上传记录与 LitePan 联动。**
 
-[![version](https://img.shields.io/badge/version-1.0.4-blue?style=flat-square)](https://github.com/tardlk/MoviePilot-Plugins/releases)
+[![version](https://img.shields.io/badge/version-1.1.0-blue?style=flat-square)](https://github.com/tardlk/MoviePilot-Plugins/releases)
 [![MoviePilot](https://img.shields.io/badge/MoviePilot-V3-6C63FF?style=flat-square)](https://github.com/jxxghp/MoviePilot)
 [![license](https://img.shields.io/badge/license-GPL--3.0-success?style=flat-square)](LICENSE)
 [![author](https://img.shields.io/badge/author-tardlk-0ea5e9?style=flat-square)](https://github.com/tardlk)
@@ -21,7 +21,7 @@
 | :-- | :-- |
 | 插件 ID | `Strm2Emby` |
 | 显示名称 | Strm2Emby |
-| 版本 | v1.0.4 |
+| 版本 | v1.1.0 |
 | 标签 | 存储、工具 |
 | 作者 | [tardlk](https://github.com/tardlk) |
 | 兼容 | MoviePilot **V3**（`system_version: ">=3.0.0"`，不兼容 V2） |
@@ -34,7 +34,7 @@
 
 - **存储接入** — 在 MoviePilot 的「存储」中使用 `Strm2Emby`，支持列表、上传、下载、删除、重命名、移动、复制、空间用量与快照。
 - **扫码登录** — 光鸭云盘 App 扫码授权，令牌自动持久化与刷新；任何 API 都不返回明文令牌。
-- **目录同步** — 本地目录 → 光鸭目录，支持 **Cron 定时** 与 **实时目录监控（watchfiles）** 两种触发，保留相对目录结构。
+- **目录同步** — 本地目录 → 光鸭目录，支持 **整理联动（整理成功后上传）**、**Cron 定时** 与 **实时目录监控（watchfiles）** 三种触发，保留相对目录结构。
 - **手动上传** — 在「整理」全页浏览 MoviePilot 主机目录，选择文件或整个文件夹上传，仅超级管理员可用。
 - **上传记录与逐文件进度** — 每个文件的结果（成功 / 跳过 / 失败、大小、远端路径、错误）与实时进度，命中秒传额外标注。
 - **秒传与断点续传** — MD5 秒传；未命中时走 OSS 分片上传并支持断点续传。
@@ -77,6 +77,7 @@
 | 字段 | 说明 |
 | :-- | :-- |
 | 启用目录同步 | 总开关 |
+| 整理联动 | 订阅 MoviePilot「整理完成」事件，**仅把整理成功后落入本地源目录的文件**上传到光鸭；若整理目标本身就是 `Strm2Emby` 则跳过。最精准，建议与监控/Cron 并用 |
 | 目录监控（实时） | 基于 `watchfiles` 实时监听本地目录变化并上传；开启后可不填 Cron。inotify 不可用（网络盘 / 带高级 ACL 的目录）时会**自动回退轮询** |
 | 本地源目录 | 要上传的本地目录，如 `/vol2/1000/Vol2/Media` |
 | 光鸭目标目录 | 上传到光鸭的目录，如 `/Media`（不存在会自动创建） |
@@ -147,6 +148,7 @@ LitePan 自动化规则：cache_clear → strm →（可选 strm_scrape）→ em
 | 存储 | `permanently_delete` | false | 删除时是否二次彻底删除 |
 | 同步 | `sync_enabled` / `sync_source_dir` / `sync_remote_dir` | false / "" / `/` | 总开关 / 本地源 / 光鸭目标 |
 | 同步 | `sync_watch` / `sync_watch_polling` / `sync_poll_interval` | false / false / 2 | 实时监控 / 强制轮询 / 轮询扫描间隔（秒） |
+| 同步 | `sync_on_transfer` | false | 整理联动：仅上传 MP 整理成功后落入本地源目录的文件 |
 | 同步 | `sync_cron` | "" | 定时 Cron |
 | 同步 | `sync_conflict` / `sync_delete_source` / `sync_extensions` | `skip` / false / "" | 同名策略 / 删源 / 扩展名白名单 |
 | 安全 | `fs_allowed_roots` | "" | 允许浏览 / 手动上传的根目录（空=不额外限制，仍需超管） |

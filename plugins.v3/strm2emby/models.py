@@ -54,6 +54,7 @@ class PluginConfigData(BaseModel):
     sync_conflict: str = "skip"
     sync_delete_source: bool = False
     sync_extensions: str = ""
+    sync_on_transfer: bool = False
 
     fs_allowed_roots: str = ""
 
@@ -107,6 +108,7 @@ class PluginConfigPayload(BaseModel):
     sync_conflict: Optional[str] = None
     sync_delete_source: Optional[bool] = None
     sync_extensions: Optional[str] = None
+    sync_on_transfer: Optional[bool] = None
 
     fs_allowed_roots: Optional[str] = None
 

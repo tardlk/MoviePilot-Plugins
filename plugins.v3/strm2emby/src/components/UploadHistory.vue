@@ -122,6 +122,7 @@ const filterOptions = [
   { title: '手动上传', value: 'manual' },
   { title: '目录同步', value: 'sync' },
   { title: '目录监控', value: 'watch' },
+  { title: '整理联动', value: 'transfer' },
 ]
 
 const filtered = computed(() => {
@@ -192,7 +193,7 @@ async function request(path, options = {}) {
 }
 
 function triggerLabel(trigger) {
-  return { manual: '手动上传', sync: '目录同步', watch: '目录监控' }[trigger] || '上传'
+  return { manual: '手动上传', sync: '目录同步', watch: '目录监控', transfer: '整理联动' }[trigger] || '上传'
 }
 
 function actionLabel(action) {
