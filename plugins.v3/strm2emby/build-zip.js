@@ -40,7 +40,6 @@ const pluginFiles = [
   'guangya_api.py',
   'guangya_client.py',
   'models.py',
-  'pyproject.toml',
 ]
 for (const file of pluginFiles) {
   const filePath = path.join(__dirname, file)

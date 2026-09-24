@@ -4,7 +4,7 @@
 
 **把「光鸭云盘」接入 MoviePilot 存储，并内置目录同步、手动上传、上传记录与 LitePan 联动。**
 
-[![version](https://img.shields.io/badge/version-1.1.0-blue?style=flat-square)](https://github.com/tardlk/MoviePilot-Plugins/releases)
+[![version](https://img.shields.io/badge/version-1.1.1-blue?style=flat-square)](https://github.com/tardlk/MoviePilot-Plugins/releases)
 [![MoviePilot](https://img.shields.io/badge/MoviePilot-V3-6C63FF?style=flat-square)](https://github.com/jxxghp/MoviePilot)
 [![license](https://img.shields.io/badge/license-GPL--3.0-success?style=flat-square)](LICENSE)
 [![author](https://img.shields.io/badge/author-tardlk-0ea5e9?style=flat-square)](https://github.com/tardlk)
@@ -21,7 +21,7 @@
 | :-- | :-- |
 | 插件 ID | `Strm2Emby` |
 | 显示名称 | Strm2Emby |
-| 版本 | v1.1.0 |
+| 版本 | v1.1.1 |
 | 标签 | 存储、工具 |
 | 作者 | [tardlk](https://github.com/tardlk) |
 | 兼容 | MoviePilot **V3**（`system_version: ">=3.0.0"`，不兼容 V2） |
@@ -189,7 +189,6 @@ MoviePilot-Plugins/
 │   ├── guangya_api.py                # 存储层 GuangYaApi（分页列举/严格查询/任务型增删改/上传/usage/snapshot）
 │   ├── guangya_client.py             # 传输层 GuangYaClient（统一请求/错误码/刷新/限流/登录/上传票据/OSS）
 │   ├── models.py                     # 各端点的 Pydantic 请求/数据模型
-│   ├── pyproject.toml                # V3 插件额外 Python 依赖
 │   ├── dist/assets/                  # Vue 联邦构建产物（宿主实际加载 remoteEntry.js）
 │   ├── src/                          # 前端源码 components/{Config,Page,AppPage,ManualUpload,DirectorySync,UploadHistory}.vue
 │   └── vite.config.js / package.json / build-zip.js
@@ -214,7 +213,7 @@ npm run build          # build:web + build:zip，额外生成可上传的 zip
 ```
 
 - 需 **Node 20**。
-- 运行时依赖（`apscheduler`、`oss2`、`watchfiles`）声明在插件目录的 `pyproject.toml`，由 MoviePilot V3 宿主安装。
+- 运行时依赖（`apscheduler`、`oss2`、`watchfiles`）均由 MoviePilot V3 宿主内置提供，插件无需额外声明依赖。
 
 ---
 

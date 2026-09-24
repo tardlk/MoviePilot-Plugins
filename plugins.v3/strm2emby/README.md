@@ -5,7 +5,7 @@ MoviePilot V3 插件：把「光鸭云盘」接入 MoviePilot 存储，并内置
 - 插件 ID / 主类：`Strm2Emby`
 - 存储展示名：`Strm2Emby`
 - 配置前缀：`strm2emby_`
-- 版本：`1.1.0`
+- 版本：`1.1.1`
 - 兼容：MoviePilot `>=3.0.0`（V3）
 
 ## 文件职责
@@ -18,7 +18,6 @@ MoviePilot V3 插件：把「光鸭云盘」接入 MoviePilot 存储，并内置
 | `models.py` | `get_api()` 各端点的请求 / 数据模型 |
 | `src/` | Vue 联邦前端源码（`Config` / `Page` / `AppPage` / `ManualUpload` / `DirectorySync` / `UploadHistory`） |
 | `dist/` | 联邦构建产物，宿主实际加载 `dist/assets/remoteEntry.js` |
-| `pyproject.toml` | V3 插件额外 Python 依赖（宿主安装） |
 | `build-zip.js` | 生成本地可上传安装的 zip |
 
 ## 构建前端
