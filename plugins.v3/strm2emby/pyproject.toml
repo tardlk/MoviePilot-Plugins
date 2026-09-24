@@ -12,6 +12,7 @@ dependencies = [
     "apscheduler>=3.10",
     # OSS 分片上传与断点续传
     "oss2>=2.18",
-    # 目录实时监控（延迟导入，缺失时仅打日志跳过，不影响其它功能）
-    "watchfiles>=0.21",
+    # 目录实时监控（延迟导入，缺失时仅打日志跳过，不影响其它功能）；
+    # >=0.22 才支持 ignore_permission_denied，用于挂载/ACL 拒绝时忽略不可读目录
+    "watchfiles>=0.22",
 ]

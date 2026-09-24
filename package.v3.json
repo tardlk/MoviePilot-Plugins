@@ -3,13 +3,14 @@
     "name": "Strm2Emby",
     "description": "将光鸭云盘接入 MoviePilot 存储，并内置目录同步、手动上传、上传记录与 LitePan 联动。",
     "labels": "存储,工具",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "icon": "https://raw.githubusercontent.com/tardlk/MoviePilot-Plugins/main/icons/Strm2Emby.png",
     "author": "tardlk",
     "level": 1,
     "release": true,
     "system_version": ">=3.0.0",
     "history": {
+      "v1.0.3": "目录监控健壮性增强：inotify 不可用（网络盘/NAS 高级 ACL）时自动回退轮询模式并按退避重启；新增「强制轮询模式」与「轮询扫描间隔」配置。",
       "v1.0.2": "清理仓库元数据并独立品牌化：存储注册名改为 Strm2Emby，补齐 README、LICENSE、市场索引与自动发布工作流。",
       "v1.0.1": "初始版本：光鸭云盘存储接入、扫码登录、目录同步（Cron/实时监控）、手动上传、上传记录与进度、LitePan 联动。"
     }

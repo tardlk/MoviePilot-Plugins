@@ -17,7 +17,15 @@
       </div>
       <div class="ds-item">
         <v-switch v-model="form.sync_watch" label="目录监控（实时）" density="compact" hide-details color="primary" />
-        <div class="ds-hint">基于 watchfiles 实时上传，可不填 Cron</div>
+        <div class="ds-hint">基于 watchfiles 实时上传，可不填 Cron；inotify 不可用时自动回退轮询</div>
+      </div>
+      <div class="ds-item">
+        <v-switch v-model="form.sync_watch_polling" label="强制轮询模式" density="compact" hide-details color="primary" :disabled="!form.sync_watch" />
+        <div class="ds-hint">网络盘/带高级 ACL 的目录不支持 inotify 时勾选（否则会自动回退）</div>
+      </div>
+      <div class="ds-item">
+        <v-text-field v-model.number="form.sync_poll_interval" label="轮询扫描间隔（秒）" type="number" min="1" density="compact" variant="outlined" hide-details class="ds-input" :disabled="!form.sync_watch" />
+        <div class="ds-hint">仅轮询模式下生效，默认 2 秒</div>
       </div>
       <div class="ds-item">
         <v-text-field v-model="form.sync_source_dir" label="本地源目录" placeholder="/vol2/1000/Vol2/Media" density="compact" variant="outlined" hide-details class="ds-input" />
@@ -75,6 +83,8 @@ const conflictOptions = [
 const form = reactive({
   sync_enabled: false,
   sync_watch: false,
+  sync_watch_polling: false,
+  sync_poll_interval: 2,
   sync_source_dir: '',
   sync_remote_dir: '/',
   sync_cron: '',
@@ -106,6 +116,8 @@ async function request(path, options = {}) {
 function applyConfig(config = {}) {
   form.sync_enabled = Boolean(config.sync_enabled)
   form.sync_watch = Boolean(config.sync_watch)
+  form.sync_watch_polling = Boolean(config.sync_watch_polling)
+  form.sync_poll_interval = Number(config.sync_poll_interval || 2)
   form.sync_source_dir = config.sync_source_dir || ''
   form.sync_remote_dir = config.sync_remote_dir || '/'
   form.sync_cron = config.sync_cron || ''
@@ -125,6 +137,8 @@ async function save() {
       body: JSON.stringify({
         sync_enabled: form.sync_enabled,
         sync_watch: form.sync_watch,
+        sync_watch_polling: form.sync_watch_polling,
+        sync_poll_interval: Number(form.sync_poll_interval || 2),
         sync_source_dir: form.sync_source_dir,
         sync_remote_dir: form.sync_remote_dir,
         sync_cron: form.sync_cron,

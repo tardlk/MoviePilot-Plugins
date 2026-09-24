@@ -99,7 +99,7 @@ class Strm2Emby(_PluginBase):
     plugin_name = "Strm2Emby"
     plugin_desc = "使 MoviePilot 存储支持光鸭云盘，内置目录同步、手动上传与 LitePan 联动。"
     plugin_icon = "https://raw.githubusercontent.com/tardlk/MoviePilot-Plugins/main/icons/Strm2Emby.png"
-    plugin_version = "1.0.2"
+    plugin_version = "1.0.3"
     plugin_author = "tardlk"
     author_url = "https://github.com/tardlk"
     plugin_config_prefix = "strm2emby_"
@@ -125,6 +125,11 @@ class Strm2Emby(_PluginBase):
     _DEFAULT_SORT_TYPE = 1
     _DEFAULT_MIN_INTERVAL = 0.0
     _DEFAULT_DEBOUNCE = 30
+    # 目录监控轮询模式默认扫描间隔（秒）；inotify 不可用（如挂载/ACL 拒绝）时回退使用
+    _DEFAULT_WATCH_POLL_SECONDS = 2
+
+    # 目录监控异常退出后的重启退避秒数（对齐宿主 LocalDirectoryWatcher）
+    _WATCH_BACKOFF = (5, 15, 30, 60, 120, 300)
 
     script_path = os.path.abspath(__file__)
     script_dir = os.path.dirname(script_path)
@@ -156,6 +161,8 @@ class Strm2Emby(_PluginBase):
         self._sync_source_dir = ""
         self._sync_remote_dir = "/"
         self._sync_watch = False
+        self._sync_watch_polling = False
+        self._sync_poll_interval = self._DEFAULT_WATCH_POLL_SECONDS
         self._sync_cron = ""
         self._sync_conflict = CONFLICT_SKIP
         self._sync_delete_source = False
@@ -253,6 +260,10 @@ class Strm2Emby(_PluginBase):
         self._sync_source_dir = (config.get("sync_source_dir") or "").strip()
         self._sync_remote_dir = (config.get("sync_remote_dir") or "").strip() or "/"
         self._sync_watch = bool(config.get("sync_watch"))
+        self._sync_watch_polling = bool(config.get("sync_watch_polling"))
+        self._sync_poll_interval = max(
+            _as_int("sync_poll_interval", self._DEFAULT_WATCH_POLL_SECONDS), 1
+        )
         self._sync_cron = (config.get("sync_cron") or "").strip()
         self._sync_conflict = self._normalize_conflict(config.get("sync_conflict"))
         self._sync_delete_source = bool(config.get("sync_delete_source"))
@@ -403,6 +414,8 @@ class Strm2Emby(_PluginBase):
             "sync_source_dir": "",
             "sync_remote_dir": "/",
             "sync_watch": False,
+            "sync_watch_polling": False,
+            "sync_poll_interval": cls._DEFAULT_WATCH_POLL_SECONDS,
             "sync_cron": "",
             "sync_conflict": CONFLICT_SKIP,
             "sync_delete_source": False,
@@ -455,6 +468,8 @@ class Strm2Emby(_PluginBase):
             "sync_source_dir": self._sync_source_dir,
             "sync_remote_dir": self._sync_remote_dir,
             "sync_watch": self._sync_watch,
+            "sync_watch_polling": self._sync_watch_polling,
+            "sync_poll_interval": self._sync_poll_interval,
             "sync_cron": self._sync_cron,
             "sync_conflict": self._sync_conflict,
             "sync_delete_source": self._sync_delete_source,
@@ -522,6 +537,10 @@ class Strm2Emby(_PluginBase):
             "sync_source_dir": _as_str("sync_source_dir"),
             "sync_remote_dir": _as_str("sync_remote_dir", "/") or "/",
             "sync_watch": _as_bool("sync_watch"),
+            "sync_watch_polling": _as_bool("sync_watch_polling"),
+            "sync_poll_interval": max(
+                _as_int("sync_poll_interval", self._DEFAULT_WATCH_POLL_SECONDS), 1
+            ),
             "sync_cron": _as_str("sync_cron"),
             "sync_conflict": self._normalize_conflict(
                 payload["sync_conflict"] if "sync_conflict" in payload else base.get("sync_conflict")
@@ -579,6 +598,8 @@ class Strm2Emby(_PluginBase):
             "sync_source_dir": self._sync_source_dir,
             "sync_remote_dir": self._sync_remote_dir,
             "sync_watch": self._sync_watch,
+            "sync_watch_polling": self._sync_watch_polling,
+            "sync_poll_interval": self._sync_poll_interval,
             "sync_cron": self._sync_cron,
             "sync_conflict": self._sync_conflict,
             "sync_delete_source": self._sync_delete_source,
@@ -2093,7 +2114,13 @@ class Strm2Emby(_PluginBase):
         self._watch_stop = None
 
     def _watch_loop(self) -> None:
-        """目录监控线程：监听本地源目录变化，去抖后增量上传。"""
+        """
+        目录监控线程：监听本地源目录变化，去抖后增量上传。
+
+        兼容性处理：部分挂载（网络盘 / NAS 高级 ACL 目录）不支持 inotify，
+        ``watchfiles`` 会抛出 ``PermissionError``。此时自动切换为轮询模式重试
+        （``force_polling=True``），并在持续失败时按退避重启，避免监控永久停摆。
+        """
         try:
             from watchfiles import Change, watch
         except Exception as err:  # noqa: BLE001
@@ -2102,77 +2129,135 @@ class Strm2Emby(_PluginBase):
 
         source = Path(self._sync_source_dir)
         exts = self._sync_ext_set()
-        logger.info(f"【Strm2Emby】目录监控线程开始，目录：{source}")
+        poll_delay_ms = (
+            max(int(self._sync_poll_interval or self._DEFAULT_WATCH_POLL_SECONDS), 1) * 1000
+        )
+        # 配置强制轮询时直接轮询；否则先尝试 inotify，失败后自动切换
+        force_polling: Optional[bool] = True if self._sync_watch_polling else None
+        logger.info(
+            "【Strm2Emby】目录监控线程开始，目录：%s（模式：%s）",
+            source,
+            "轮询" if force_polling else "自动",
+        )
+        backoff_index = 0
         try:
-            for changes in watch(
-                str(source),
-                stop_event=self._watch_stop,
-                recursive=True,
-                debounce=10000,
-                step=1000,
-                raise_interrupt=False,
-            ):
-                if self._watch_stop is not None and self._watch_stop.is_set():
+            while not (self._watch_stop is not None and self._watch_stop.is_set()):
+                try:
+                    self._run_watch(source, exts, watch, Change, force_polling, poll_delay_ms)
                     break
-                targets = [
-                    Path(path)
-                    for change, path in changes
-                    if change in (Change.added, Change.modified)
-                ]
-                targets = [p for p in targets if p.is_file()]
-                if not targets:
-                    continue
-                stats = {"uploaded": 0, "skipped": 0, "failed": 0}
-                records: List[Dict[str, Any]] = []
-                with self._sync_lock:
-                    remote_root = self._prepare_remote()
-                    if remote_root is None:
+                except Exception as err:  # noqa: BLE001
+                    if self._watch_stop is not None and self._watch_stop.is_set():
+                        break
+                    if force_polling is not True:
+                        logger.warning(
+                            f"【Strm2Emby】目录监控 inotify 不可用（{err}），"
+                            f"自动切换轮询模式重试：{source}"
+                        )
+                        force_polling = True
+                        backoff_index = 0
                         continue
-                    self._begin_progress(TRIGGER_WATCH, len(targets), "目录监控上传中")
-                    for local in targets:
-                        size = local.stat().st_size if local.is_file() else 0
-                        row = self._start_progress_item(local.name, local.as_posix(), size)
-                        result = self._sync_file(
-                            local,
-                            source,
-                            remote_root,
-                            exts,
-                            trigger=TRIGGER_WATCH,
-                            on_progress=lambda percent, _row=row: self._update_progress_item(
-                                _row, percent=percent
-                            ),
-                            on_phase=lambda phase, _row=row: self._update_progress_item(
-                                _row, phase=phase
-                            ),
-                        )
-                        status = result.get("status", "failed")
-                        stats[status] = stats.get(status, 0) + 1
-                        self._update_progress_item(
-                            row,
-                            status=status,
-                            percent=100 if status == "uploaded" else row.get("percent", 0),
-                            remote=result.get("remote", ""),
-                            error=result.get("error", ""),
-                            flash=result.get("flash", False),
-                        )
-                        records.append(self._build_record(TRIGGER_WATCH, result))
-                        self._update_progress(
-                            uploaded=stats["uploaded"],
-                            skipped=stats["skipped"],
-                            failed=stats["failed"],
-                        )
-                    self._finish_progress(stats, TRIGGER_WATCH)
-                    logger.info(
-                        f"【Strm2Emby】目录监控触发：上传 {stats['uploaded']}，"
-                        f"跳过 {stats['skipped']}，失败 {stats['failed']}"
-                    )
-                self._record_upload(records)
-                if stats["uploaded"] > 0:
-                    self._schedule_litepan_notify()
-        except Exception as err:  # noqa: BLE001
-            logger.error(f"【Strm2Emby】目录监控异常退出：{err}")
+                    delay = self._WATCH_BACKOFF[
+                        min(backoff_index, len(self._WATCH_BACKOFF) - 1)
+                    ]
+                    backoff_index += 1
+                    logger.error(f"【Strm2Emby】目录监控异常，{delay} 秒后重试：{err}")
+                    if self._watch_stop is not None and self._watch_stop.wait(delay):
+                        break
         finally:
             logger.info("【Strm2Emby】目录监控线程结束")
+
+    def _run_watch(
+        self,
+        source: Path,
+        exts: set,
+        watch: Any,
+        change_cls: Any,
+        force_polling: Optional[bool],
+        poll_delay_ms: int,
+    ) -> None:
+        """
+        执行一次 watchfiles 监控循环；异常向上抛出，由 ``_watch_loop`` 决定回退/重启。
+
+        :param force_polling: True 走轮询；None/False 走 inotify。
+        :param poll_delay_ms: 轮询模式的目录扫描间隔（毫秒）。
+        """
+        # 仅在轮询模式下忽略权限拒绝的目录；inotify 模式不忽略，使权限问题能抛出，
+        # 从而触发轮询回退，而不是静默地什么都不监控。
+        ignore_permission_denied = force_polling is True
+        for changes in watch(
+            str(source),
+            stop_event=self._watch_stop,
+            recursive=True,
+            debounce=10000,
+            step=1000,
+            raise_interrupt=False,
+            force_polling=force_polling,
+            poll_delay_ms=poll_delay_ms,
+            ignore_permission_denied=ignore_permission_denied,
+        ):
+            if self._watch_stop is not None and self._watch_stop.is_set():
+                break
+            self._handle_watch_batch(changes, source, exts, change_cls)
+
+    def _handle_watch_batch(
+        self, changes: Any, source: Path, exts: set, change_cls: Any
+    ) -> None:
+        """处理一批 watchfiles 变更（与触发模式无关，供监控循环复用）。"""
+        targets = [
+            Path(path)
+            for change, path in changes
+            if change in (change_cls.added, change_cls.modified)
+        ]
+        targets = [p for p in targets if p.is_file()]
+        if not targets:
+            return
+        stats = {"uploaded": 0, "skipped": 0, "failed": 0}
+        records: List[Dict[str, Any]] = []
+        with self._sync_lock:
+            remote_root = self._prepare_remote()
+            if remote_root is None:
+                return
+            self._begin_progress(TRIGGER_WATCH, len(targets), "目录监控上传中")
+            for local in targets:
+                size = local.stat().st_size if local.is_file() else 0
+                row = self._start_progress_item(local.name, local.as_posix(), size)
+                result = self._sync_file(
+                    local,
+                    source,
+                    remote_root,
+                    exts,
+                    trigger=TRIGGER_WATCH,
+                    on_progress=lambda percent, _row=row: self._update_progress_item(
+                        _row, percent=percent
+                    ),
+                    on_phase=lambda phase, _row=row: self._update_progress_item(
+                        _row, phase=phase
+                    ),
+                )
+                status = result.get("status", "failed")
+                stats[status] = stats.get(status, 0) + 1
+                self._update_progress_item(
+                    row,
+                    status=status,
+                    percent=100 if status == "uploaded" else row.get("percent", 0),
+                    remote=result.get("remote", ""),
+                    error=result.get("error", ""),
+                    flash=result.get("flash", False),
+                )
+                records.append(self._build_record(TRIGGER_WATCH, result))
+                self._update_progress(
+                    uploaded=stats["uploaded"],
+                    skipped=stats["skipped"],
+                    failed=stats["failed"],
+                )
+            self._finish_progress(stats, TRIGGER_WATCH)
+            logger.info(
+                f"【Strm2Emby】目录监控触发：上传 {stats['uploaded']}，"
+                f"跳过 {stats['skipped']}，失败 {stats['failed']}"
+            )
+        self._record_upload(records)
+        if stats["uploaded"] > 0:
+            self._schedule_litepan_notify()
 
     # ── 记录 / 进度 / LitePan 查询 API ──
 

@@ -5,7 +5,7 @@ MoviePilot V3 插件：把「光鸭云盘」接入 MoviePilot 存储，并内置
 - 插件 ID / 主类：`Strm2Emby`
 - 存储展示名：`Strm2Emby`
 - 配置前缀：`strm2emby_`
-- 版本：`1.0.2`
+- 版本：`1.0.3`
 - 兼容：MoviePilot `>=3.0.0`（V3）
 
 ## 文件职责

@@ -1,7 +1,7 @@
 import { importShared } from './__federation_fn_import-054b33c3.js';
 import { _ as _export_sfc } from './_plugin-vue_export-helper-c4c0bc37.js';
 
-const DirectorySync_vue_vue_type_style_index_0_scoped_0f24c13a_lang = '';
+const DirectorySync_vue_vue_type_style_index_0_scoped_fb205e6d_lang = '';
 
 const {resolveComponent:_resolveComponent$3,createVNode:_createVNode$3,createTextVNode:_createTextVNode$3,createElementVNode:_createElementVNode$3,toDisplayString:_toDisplayString$3,withCtx:_withCtx$3,openBlock:_openBlock$3,createElementBlock:_createElementBlock$3,createCommentVNode:_createCommentVNode$3,createBlock:_createBlock$3} = await importShared('vue');
 
@@ -18,8 +18,10 @@ const _hoisted_9$2 = { class: "ds-item" };
 const _hoisted_10$2 = { class: "ds-item" };
 const _hoisted_11$2 = { class: "ds-item" };
 const _hoisted_12$2 = { class: "ds-item" };
-const _hoisted_13$2 = { class: "ds-actions" };
-const _hoisted_14$2 = {
+const _hoisted_13$2 = { class: "ds-item" };
+const _hoisted_14$2 = { class: "ds-item" };
+const _hoisted_15$2 = { class: "ds-actions" };
+const _hoisted_16$2 = {
   key: 0,
   class: "ds-hint"
 };
@@ -54,6 +56,8 @@ const conflictOptions = [
 const form = reactive$1({
   sync_enabled: false,
   sync_watch: false,
+  sync_watch_polling: false,
+  sync_poll_interval: 2,
   sync_source_dir: '',
   sync_remote_dir: '/',
   sync_cron: '',
@@ -85,6 +89,8 @@ async function request(path, options = {}) {
 function applyConfig(config = {}) {
   form.sync_enabled = Boolean(config.sync_enabled);
   form.sync_watch = Boolean(config.sync_watch);
+  form.sync_watch_polling = Boolean(config.sync_watch_polling);
+  form.sync_poll_interval = Number(config.sync_poll_interval || 2);
   form.sync_source_dir = config.sync_source_dir || '';
   form.sync_remote_dir = config.sync_remote_dir || '/';
   form.sync_cron = config.sync_cron || '';
@@ -104,6 +110,8 @@ async function save() {
       body: JSON.stringify({
         sync_enabled: form.sync_enabled,
         sync_watch: form.sync_watch,
+        sync_watch_polling: form.sync_watch_polling,
+        sync_poll_interval: Number(form.sync_poll_interval || 2),
         sync_source_dir: form.sync_source_dir,
         sync_remote_dir: form.sync_remote_dir,
         sync_cron: form.sync_cron,
@@ -163,7 +171,7 @@ return (_ctx, _cache) => {
           color: "#10b981",
           class: "mr-1"
         }),
-        _cache[8] || (_cache[8] = _createTextVNode$3(" 目录同步 ", -1))
+        _cache[10] || (_cache[10] = _createTextVNode$3(" 目录同步 ", -1))
       ]),
       _createVNode$3(_component_v_chip, {
         color: form.sync_enabled ? 'success' : 'grey',
@@ -186,7 +194,7 @@ return (_ctx, _cache) => {
           "hide-details": "",
           color: "primary"
         }, null, 8, ["modelValue"]),
-        _cache[9] || (_cache[9] = _createElementVNode$3("div", { class: "ds-hint" }, "把本地目录上传到光鸭云盘（独立于整理链）", -1))
+        _cache[11] || (_cache[11] = _createElementVNode$3("div", { class: "ds-hint" }, "把本地目录上传到光鸭云盘（独立于整理链）", -1))
       ]),
       _createElementVNode$3("div", _hoisted_6$3, [
         _createVNode$3(_component_v_switch, {
@@ -197,12 +205,40 @@ return (_ctx, _cache) => {
           "hide-details": "",
           color: "primary"
         }, null, 8, ["modelValue"]),
-        _cache[10] || (_cache[10] = _createElementVNode$3("div", { class: "ds-hint" }, "基于 watchfiles 实时上传，可不填 Cron", -1))
+        _cache[12] || (_cache[12] = _createElementVNode$3("div", { class: "ds-hint" }, "基于 watchfiles 实时上传，可不填 Cron；inotify 不可用时自动回退轮询", -1))
       ]),
       _createElementVNode$3("div", _hoisted_7$2, [
+        _createVNode$3(_component_v_switch, {
+          modelValue: form.sync_watch_polling,
+          "onUpdate:modelValue": _cache[2] || (_cache[2] = $event => ((form.sync_watch_polling) = $event)),
+          label: "强制轮询模式",
+          density: "compact",
+          "hide-details": "",
+          color: "primary",
+          disabled: !form.sync_watch
+        }, null, 8, ["modelValue", "disabled"]),
+        _cache[13] || (_cache[13] = _createElementVNode$3("div", { class: "ds-hint" }, "网络盘/带高级 ACL 的目录不支持 inotify 时勾选（否则会自动回退）", -1))
+      ]),
+      _createElementVNode$3("div", _hoisted_8$2, [
+        _createVNode$3(_component_v_text_field, {
+          modelValue: form.sync_poll_interval,
+          "onUpdate:modelValue": _cache[3] || (_cache[3] = $event => ((form.sync_poll_interval) = $event)),
+          modelModifiers: { number: true },
+          label: "轮询扫描间隔（秒）",
+          type: "number",
+          min: "1",
+          density: "compact",
+          variant: "outlined",
+          "hide-details": "",
+          class: "ds-input",
+          disabled: !form.sync_watch
+        }, null, 8, ["modelValue", "disabled"]),
+        _cache[14] || (_cache[14] = _createElementVNode$3("div", { class: "ds-hint" }, "仅轮询模式下生效，默认 2 秒", -1))
+      ]),
+      _createElementVNode$3("div", _hoisted_9$2, [
         _createVNode$3(_component_v_text_field, {
           modelValue: form.sync_source_dir,
-          "onUpdate:modelValue": _cache[2] || (_cache[2] = $event => ((form.sync_source_dir) = $event)),
+          "onUpdate:modelValue": _cache[4] || (_cache[4] = $event => ((form.sync_source_dir) = $event)),
           label: "本地源目录",
           placeholder: "/vol2/1000/Vol2/Media",
           density: "compact",
@@ -211,10 +247,10 @@ return (_ctx, _cache) => {
           class: "ds-input"
         }, null, 8, ["modelValue"])
       ]),
-      _createElementVNode$3("div", _hoisted_8$2, [
+      _createElementVNode$3("div", _hoisted_10$2, [
         _createVNode$3(_component_v_text_field, {
           modelValue: form.sync_remote_dir,
-          "onUpdate:modelValue": _cache[3] || (_cache[3] = $event => ((form.sync_remote_dir) = $event)),
+          "onUpdate:modelValue": _cache[5] || (_cache[5] = $event => ((form.sync_remote_dir) = $event)),
           label: "光鸭目标目录",
           placeholder: "/Media",
           density: "compact",
@@ -223,10 +259,10 @@ return (_ctx, _cache) => {
           class: "ds-input"
         }, null, 8, ["modelValue"])
       ]),
-      _createElementVNode$3("div", _hoisted_9$2, [
+      _createElementVNode$3("div", _hoisted_11$2, [
         _createVNode$3(_component_v_text_field, {
           modelValue: form.sync_cron,
-          "onUpdate:modelValue": _cache[4] || (_cache[4] = $event => ((form.sync_cron) = $event)),
+          "onUpdate:modelValue": _cache[6] || (_cache[6] = $event => ((form.sync_cron) = $event)),
           label: "同步周期（Cron）",
           placeholder: "0 3 * * *",
           density: "compact",
@@ -235,10 +271,10 @@ return (_ctx, _cache) => {
           class: "ds-input"
         }, null, 8, ["modelValue"])
       ]),
-      _createElementVNode$3("div", _hoisted_10$2, [
+      _createElementVNode$3("div", _hoisted_12$2, [
         _createVNode$3(_component_v_select, {
           modelValue: form.sync_conflict,
-          "onUpdate:modelValue": _cache[5] || (_cache[5] = $event => ((form.sync_conflict) = $event)),
+          "onUpdate:modelValue": _cache[7] || (_cache[7] = $event => ((form.sync_conflict) = $event)),
           items: conflictOptions,
           "item-title": "title",
           "item-value": "value",
@@ -249,10 +285,10 @@ return (_ctx, _cache) => {
           class: "ds-input"
         }, null, 8, ["modelValue"])
       ]),
-      _createElementVNode$3("div", _hoisted_11$2, [
+      _createElementVNode$3("div", _hoisted_13$2, [
         _createVNode$3(_component_v_text_field, {
           modelValue: form.sync_extensions,
-          "onUpdate:modelValue": _cache[6] || (_cache[6] = $event => ((form.sync_extensions) = $event)),
+          "onUpdate:modelValue": _cache[8] || (_cache[8] = $event => ((form.sync_extensions) = $event)),
           label: "仅同步扩展名（可选）",
           placeholder: ".mkv,.mp4,.srt",
           density: "compact",
@@ -261,25 +297,25 @@ return (_ctx, _cache) => {
           class: "ds-input"
         }, null, 8, ["modelValue"])
       ]),
-      _createElementVNode$3("div", _hoisted_12$2, [
+      _createElementVNode$3("div", _hoisted_14$2, [
         _createVNode$3(_component_v_switch, {
           modelValue: form.sync_delete_source,
-          "onUpdate:modelValue": _cache[7] || (_cache[7] = $event => ((form.sync_delete_source) = $event)),
+          "onUpdate:modelValue": _cache[9] || (_cache[9] = $event => ((form.sync_delete_source) = $event)),
           label: "上传成功后删除本地",
           density: "compact",
           "hide-details": "",
           color: "error"
         }, null, 8, ["modelValue"]),
-        _cache[11] || (_cache[11] = _createElementVNode$3("div", { class: "ds-hint" }, "谨慎开启，删除不可恢复", -1))
+        _cache[15] || (_cache[15] = _createElementVNode$3("div", { class: "ds-hint" }, "谨慎开启，删除不可恢复", -1))
       ])
     ]),
-    _createElementVNode$3("div", _hoisted_13$2, [
+    _createElementVNode$3("div", _hoisted_15$2, [
       _createVNode$3(_component_v_btn, {
         color: "primary",
         loading: saving.value,
         onClick: save
       }, {
-        default: _withCtx$3(() => [...(_cache[12] || (_cache[12] = [
+        default: _withCtx$3(() => [...(_cache[16] || (_cache[16] = [
           _createTextVNode$3("保存同步设置", -1)
         ]))]),
         _: 1
@@ -291,13 +327,13 @@ return (_ctx, _cache) => {
         disabled: !__props.loggedIn,
         onClick: runNow
       }, {
-        default: _withCtx$3(() => [...(_cache[13] || (_cache[13] = [
+        default: _withCtx$3(() => [...(_cache[17] || (_cache[17] = [
           _createTextVNode$3("立即同步", -1)
         ]))]),
         _: 1
       }, 8, ["loading", "disabled"]),
       (!__props.loggedIn)
-        ? (_openBlock$3(), _createElementBlock$3("span", _hoisted_14$2, "未登录光鸭云盘，无法同步"))
+        ? (_openBlock$3(), _createElementBlock$3("span", _hoisted_16$2, "未登录光鸭云盘，无法同步"))
         : _createCommentVNode$3("", true)
     ]),
     (feedback.value.text)
@@ -318,7 +354,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const DirectorySync = /*#__PURE__*/_export_sfc(_sfc_main$3, [['__scopeId',"data-v-0f24c13a"]]);
+const DirectorySync = /*#__PURE__*/_export_sfc(_sfc_main$3, [['__scopeId',"data-v-fb205e6d"]]);
 
 const ManualUpload_vue_vue_type_style_index_0_scoped_de561c85_lang = '';
 

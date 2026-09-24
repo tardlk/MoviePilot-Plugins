@@ -48,6 +48,8 @@ class PluginConfigData(BaseModel):
     sync_source_dir: str = ""
     sync_remote_dir: str = "/"
     sync_watch: bool = False
+    sync_watch_polling: bool = False
+    sync_poll_interval: int = 2
     sync_cron: str = ""
     sync_conflict: str = "skip"
     sync_delete_source: bool = False
@@ -99,6 +101,8 @@ class PluginConfigPayload(BaseModel):
     sync_source_dir: Optional[str] = None
     sync_remote_dir: Optional[str] = None
     sync_watch: Optional[bool] = None
+    sync_watch_polling: Optional[bool] = None
+    sync_poll_interval: Optional[int] = None
     sync_cron: Optional[str] = None
     sync_conflict: Optional[str] = None
     sync_delete_source: Optional[bool] = None

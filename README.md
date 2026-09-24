@@ -4,7 +4,7 @@
 
 **把「光鸭云盘」接入 MoviePilot 存储，并内置目录同步、手动上传、上传记录与 LitePan 联动。**
 
-[![version](https://img.shields.io/badge/version-1.0.2-blue?style=flat-square)](https://github.com/tardlk/MoviePilot-Plugins/releases)
+[![version](https://img.shields.io/badge/version-1.0.3-blue?style=flat-square)](https://github.com/tardlk/MoviePilot-Plugins/releases)
 [![MoviePilot](https://img.shields.io/badge/MoviePilot-V3-6C63FF?style=flat-square)](https://github.com/jxxghp/MoviePilot)
 [![license](https://img.shields.io/badge/license-GPL--3.0-success?style=flat-square)](LICENSE)
 [![author](https://img.shields.io/badge/author-tardlk-0ea5e9?style=flat-square)](https://github.com/tardlk)
@@ -21,7 +21,7 @@
 | :-- | :-- |
 | 插件 ID | `Strm2Emby` |
 | 显示名称 | Strm2Emby |
-| 版本 | v1.0.2 |
+| 版本 | v1.0.3 |
 | 标签 | 存储、工具 |
 | 作者 | [tardlk](https://github.com/tardlk) |
 | 兼容 | MoviePilot **V3**（`system_version: ">=3.0.0"`，不兼容 V2） |
@@ -77,7 +77,7 @@
 | 字段 | 说明 |
 | :-- | :-- |
 | 启用目录同步 | 总开关 |
-| 目录监控（实时） | 基于 `watchfiles` 实时监听本地目录变化并上传；开启后可不填 Cron |
+| 目录监控（实时） | 基于 `watchfiles` 实时监听本地目录变化并上传；开启后可不填 Cron。inotify 不可用（网络盘 / 带高级 ACL 的目录）时会**自动回退轮询** |
 | 本地源目录 | 要上传的本地目录，如 `/vol2/1000/Vol2/Media` |
 | 光鸭目标目录 | 上传到光鸭的目录，如 `/Media`（不存在会自动创建） |
 | 同步周期（Cron） | 定时兜底，如 `0 3 * * *` 表示每天 3 点；与目录监控可同时使用 |
@@ -146,7 +146,8 @@ LitePan 自动化规则：cache_clear → strm →（可选 strm_scrape）→ em
 | 查询 | `min_interval` | 0 | 两次云盘 API 请求的最小间隔（秒） |
 | 存储 | `permanently_delete` | false | 删除时是否二次彻底删除 |
 | 同步 | `sync_enabled` / `sync_source_dir` / `sync_remote_dir` | false / "" / `/` | 总开关 / 本地源 / 光鸭目标 |
-| 同步 | `sync_watch` / `sync_cron` | false / "" | 实时监控 / 定时 Cron |
+| 同步 | `sync_watch` / `sync_watch_polling` / `sync_poll_interval` | false / false / 2 | 实时监控 / 强制轮询 / 轮询扫描间隔（秒） |
+| 同步 | `sync_cron` | "" | 定时 Cron |
 | 同步 | `sync_conflict` / `sync_delete_source` / `sync_extensions` | `skip` / false / "" | 同名策略 / 删源 / 扩展名白名单 |
 | 安全 | `fs_allowed_roots` | "" | 允许浏览 / 手动上传的根目录（空=不额外限制，仍需超管） |
 | LitePan | `litepan_enabled` / `litepan_base_url` | false / "" | 联动开关 / LitePan 地址 |
