@@ -196,6 +196,7 @@ MoviePilot-Plugins/
 ├── package.v3.json                   # V3 插件市场索引
 ├── .github/workflows/release.yml     # 自动发布工作流
 ├── LICENSE                           # GPL-3.0
+├── AGENTS.md                         # 面向 AI/开发者的接手文档
 └── README.md                         # 本文件
 ```
 
