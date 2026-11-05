@@ -4,7 +4,7 @@
 
 **把「光鸭云盘」接入 MoviePilot 存储，并内置目录同步、手动上传、上传记录与 LitePan 联动。**
 
-[![version](https://img.shields.io/badge/version-1.1.1-blue?style=flat-square)](https://github.com/tardlk/MoviePilot-Plugins/releases)
+[![version](https://img.shields.io/badge/version-1.1.2-blue?style=flat-square)](https://github.com/tardlk/MoviePilot-Plugins/releases)
 [![MoviePilot](https://img.shields.io/badge/MoviePilot-V3-6C63FF?style=flat-square)](https://github.com/jxxghp/MoviePilot)
 [![license](https://img.shields.io/badge/license-GPL--3.0-success?style=flat-square)](LICENSE)
 [![author](https://img.shields.io/badge/author-tardlk-0ea5e9?style=flat-square)](https://github.com/tardlk)
@@ -21,7 +21,7 @@
 | :-- | :-- |
 | 插件 ID | `Strm2Emby` |
 | 显示名称 | Strm2Emby |
-| 版本 | v1.1.1 |
+| 版本 | v1.1.2 |
 | 标签 | 存储、工具 |
 | 作者 | [tardlk](https://github.com/tardlk) |
 | 兼容 | MoviePilot **V3**（`system_version: ">=3.0.0"`，不兼容 V2） |
@@ -80,7 +80,7 @@
 | 整理联动 | 订阅 MoviePilot「整理完成」事件，**仅把整理成功后落入本地源目录的文件**上传到光鸭；若整理目标本身就是 `Strm2Emby` 则跳过。最精准，建议与监控/Cron 并用 |
 | 目录监控（实时） | 基于 `watchfiles` 实时监听本地目录变化并上传；开启后可不填 Cron。inotify 不可用（网络盘 / 带高级 ACL 的目录）时会**自动回退轮询** |
 | 本地源目录 | 要上传的本地目录，如 `/vol2/1000/Vol2/Media` |
-| 光鸭目标目录 | 上传到光鸭的目录，如 `/Media`（不存在会自动创建） |
+| 光鸭目标目录 | 上传到光鸭的目录，如 `/Media`。可点输入框右侧的文件夹按钮浏览云盘目录逐级选择，也可直接手填（不存在会自动创建） |
 | 同步周期（Cron） | 定时兜底，如 `0 3 * * *` 表示每天 3 点；与目录监控可同时使用 |
 | 仅同步扩展名 | 可选，逗号分隔，如 `.mkv,.mp4,.srt`；留空表示全部 |
 | 同名文件处理 | `跳过`（默认，保留云端）/ `覆盖`（先删云端同名再上传）/ `保留两者`（自动重命名为 `名称 (1).后缀`） |
@@ -171,6 +171,7 @@ LitePan 自动化规则：cache_clear → strm →（可选 strm_scrape）→ em
 | POST | `/api/v1/plugin/Strm2Emby/login/logout` | 退出登录 |
 | GET | `/api/v1/plugin/Strm2Emby/sync` | 立即执行一次目录同步 |
 | GET | `/api/v1/plugin/Strm2Emby/fs/list?path=` | 浏览 MoviePilot 主机目录（仅超级管理员） |
+| GET | `/api/v1/plugin/Strm2Emby/remote/list?path=` | 浏览光鸭云盘目录（只读，仅返回子目录，供目标目录选择器使用） |
 | POST | `/api/v1/plugin/Strm2Emby/upload` | 手动上传 `{paths, remote_dir}`（仅超级管理员） |
 | GET | `/api/v1/plugin/Strm2Emby/progress` | 当前上传 / 同步进度 |
 | GET | `/api/v1/plugin/Strm2Emby/history?limit=` | 上传 / 同步记录 |
@@ -190,7 +191,7 @@ MoviePilot-Plugins/
 │   ├── guangya_client.py             # 传输层 GuangYaClient（统一请求/错误码/刷新/限流/登录/上传票据/OSS）
 │   ├── models.py                     # 各端点的 Pydantic 请求/数据模型
 │   ├── dist/assets/                  # Vue 联邦构建产物（宿主实际加载 remoteEntry.js）
-│   ├── src/                          # 前端源码 components/{Config,Page,AppPage,ManualUpload,DirectorySync,UploadHistory}.vue
+│   ├── src/                          # 前端源码 components/{Config,Page,AppPage,ManualUpload,DirectorySync,UploadHistory,RemoteDirPicker}.vue
 │   └── vite.config.js / package.json / build-zip.js
 ├── icons/Strm2Emby.png               # 插件图标
 ├── package.v3.json                   # V3 插件市场索引

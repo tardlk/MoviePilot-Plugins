@@ -35,7 +35,12 @@
         <v-text-field v-model="form.sync_source_dir" label="本地源目录" placeholder="/vol2/1000/Vol2/Media" density="compact" variant="outlined" hide-details class="ds-input" />
       </div>
       <div class="ds-item">
-        <v-text-field v-model="form.sync_remote_dir" label="光鸭目标目录" placeholder="/Media" density="compact" variant="outlined" hide-details class="ds-input" />
+        <RemoteDirPicker
+          v-model="form.sync_remote_dir"
+          :api="api"
+          :plugin-id="pluginId"
+          :source-plugin-id="sourcePluginId"
+        />
       </div>
       <div class="ds-item">
         <v-text-field v-model="form.sync_cron" label="同步周期（Cron）" placeholder="0 3 * * *" density="compact" variant="outlined" hide-details class="ds-input" />
@@ -66,6 +71,7 @@
 
 <script setup>
 import { reactive, ref, watch } from 'vue'
+import RemoteDirPicker from './RemoteDirPicker.vue'
 
 const props = defineProps({
   api: { type: Object, default: () => ({}) },

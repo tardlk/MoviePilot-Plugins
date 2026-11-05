@@ -59,15 +59,12 @@
 
       <!-- 已选与目标目录 -->
       <div class="mu-side">
-        <v-text-field
-          v-model="uploadRemoteDir"
-          label="光鸭目标目录"
-          density="compact"
-          variant="outlined"
-          hide-details
-          class="mu-input"
-          placeholder="/Media"
-          @update:model-value="markRemoteDirTouched"
+        <RemoteDirPicker
+          :model-value="uploadRemoteDir"
+          :api="api"
+          :plugin-id="pluginId"
+          :source-plugin-id="sourcePluginId"
+          @update:model-value="onRemoteDirChange"
         />
         <div class="mu-selected">
           <v-chip
@@ -106,6 +103,7 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
+import RemoteDirPicker from './RemoteDirPicker.vue'
 
 const props = defineProps({
   // 宿主注入的实例作用域 API 客户端
@@ -158,7 +156,8 @@ function formatSize(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
-function markRemoteDirTouched() {
+function onRemoteDirChange(next) {
+  uploadRemoteDir.value = next || '/'
   remoteDirTouched.value = true
 }
 

@@ -1,7 +1,280 @@
 import { importShared } from './__federation_fn_import-054b33c3.js';
 import { _ as _export_sfc } from './_plugin-vue_export-helper-c4c0bc37.js';
 
-const DirectorySync_vue_vue_type_style_index_0_scoped_f9283ea6_lang = '';
+const RemoteDirPicker_vue_vue_type_style_index_0_scoped_0b994415_lang = '';
+
+const {resolveComponent:_resolveComponent$4,createVNode:_createVNode$4,withCtx:_withCtx$4,createElementVNode:_createElementVNode$4,withKeys:_withKeys$1,openBlock:_openBlock$4,createElementBlock:_createElementBlock$4,createCommentVNode:_createCommentVNode$4,toDisplayString:_toDisplayString$4,renderList:_renderList$2,Fragment:_Fragment$2,createTextVNode:_createTextVNode$4} = await importShared('vue');
+
+
+const _hoisted_1$4 = { class: "rdp-field" };
+const _hoisted_2$4 = { class: "rdp-card" };
+const _hoisted_3$4 = { class: "rdp-head" };
+const _hoisted_4$4 = { class: "rdp-toolbar" };
+const _hoisted_5$4 = { class: "rdp-list" };
+const _hoisted_6$4 = {
+  key: 0,
+  class: "rdp-empty"
+};
+const _hoisted_7$3 = {
+  key: 1,
+  class: "rdp-error"
+};
+const _hoisted_8$3 = {
+  key: 2,
+  class: "rdp-empty"
+};
+const _hoisted_9$3 = ["onClick"];
+const _hoisted_10$3 = { class: "rdp-item__name" };
+const _hoisted_11$3 = { class: "rdp-current" };
+const _hoisted_12$3 = { class: "rdp-actions" };
+
+const {computed: computed$3,ref: ref$4} = await importShared('vue');
+
+
+
+const _sfc_main$4 = {
+  __name: 'RemoteDirPicker',
+  props: {
+  modelValue: { type: String, default: '/' },
+  api: { type: Object, default: () => ({}) },
+  pluginId: { type: String, default: '' },
+  sourcePluginId: { type: String, default: '' },
+  label: { type: String, default: '光鸭目标目录' },
+  placeholder: { type: String, default: '/Media' },
+  disabled: { type: Boolean, default: false },
+},
+  emits: ['update:modelValue'],
+  setup(__props, { emit: __emit }) {
+
+const props = __props;
+
+const emit = __emit;
+
+const value = computed$3({
+  get: () => props.modelValue || '/',
+  set: (next) => emit('update:modelValue', next),
+});
+
+const dialog = ref$4(false);
+const currentPath = ref$4('/');
+const parentPath = ref$4('');
+const pathInput = ref$4('/');
+const items = ref$4([]);
+const loading = ref$4(false);
+const error = ref$4('');
+
+const currentPluginId = computed$3(() => props.pluginId || props.sourcePluginId || 'Strm2Emby');
+
+async function request(path) {
+  const apiPath = `plugin/${currentPluginId.value}${path}`;
+  if (props.api?.get) {
+    return props.api.get(apiPath, { feedback: 'silent' })
+  }
+  const response = await fetch(`/api/v1/${apiPath}`, {
+    headers: { 'Content-Type': 'application/json' },
+  });
+  return response.json()
+}
+
+function parentOf(path) {
+  if (!path || path === '/') return ''
+  const parts = path.split('/').filter(Boolean);
+  parts.pop();
+  return parts.length ? `/${parts.join('/')}` : '/'
+}
+
+async function browse(path) {
+  const target = (path || '/').trim() || '/';
+  loading.value = true;
+  error.value = '';
+  try {
+    const result = await request(`/remote/list?path=${encodeURIComponent(target)}`);
+    if (!result.success) {
+      // 目标目录可能还不存在（用户打算新建）：自动回退到最近的已存在父目录
+      const fallback = parentOf(target);
+      if (fallback && fallback !== target) {
+        loading.value = false;
+        return browse(fallback)
+      }
+      error.value = result.message || '打开目录失败';
+      return
+    }
+    const data = result.data || {};
+    currentPath.value = data.path || target;
+    parentPath.value = data.parent || '';
+    pathInput.value = currentPath.value;
+    items.value = Array.isArray(data.items) ? data.items : [];
+  } catch (err) {
+    error.value = `打开目录失败：${err.message || err}`;
+  } finally {
+    loading.value = false;
+  }
+}
+
+function openPicker() {
+  currentPath.value = props.modelValue || '/';
+  pathInput.value = currentPath.value;
+  items.value = [];
+  error.value = '';
+  dialog.value = true;
+  browse(currentPath.value);
+}
+
+function goUp() {
+  if (parentPath.value) {
+    browse(parentPath.value);
+  }
+}
+
+function choose() {
+  emit('update:modelValue', currentPath.value || '/');
+  dialog.value = false;
+}
+
+return (_ctx, _cache) => {
+  const _component_v_btn = _resolveComponent$4("v-btn");
+  const _component_v_text_field = _resolveComponent$4("v-text-field");
+  const _component_v_icon = _resolveComponent$4("v-icon");
+  const _component_v_dialog = _resolveComponent$4("v-dialog");
+
+  return (_openBlock$4(), _createElementBlock$4("div", _hoisted_1$4, [
+    _createVNode$4(_component_v_text_field, {
+      modelValue: value.value,
+      "onUpdate:modelValue": _cache[0] || (_cache[0] = $event => ((value).value = $event)),
+      label: __props.label,
+      placeholder: __props.placeholder,
+      disabled: __props.disabled,
+      density: "compact",
+      variant: "outlined",
+      "hide-details": "",
+      class: "rdp-input"
+    }, {
+      "append-inner": _withCtx$4(() => [
+        _createVNode$4(_component_v_btn, {
+          variant: "text",
+          density: "comfortable",
+          size: "small",
+          disabled: __props.disabled,
+          icon: "mdi-folder-search-outline",
+          title: '浏览云盘目录',
+          onClick: openPicker
+        }, null, 8, ["disabled"])
+      ]),
+      _: 1
+    }, 8, ["modelValue", "label", "placeholder", "disabled"]),
+    _createVNode$4(_component_v_dialog, {
+      modelValue: dialog.value,
+      "onUpdate:modelValue": _cache[6] || (_cache[6] = $event => ((dialog).value = $event)),
+      "max-width": "520",
+      scrollable: ""
+    }, {
+      default: _withCtx$4(() => [
+        _createElementVNode$4("div", _hoisted_2$4, [
+          _createElementVNode$4("div", _hoisted_3$4, [
+            _cache[7] || (_cache[7] = _createElementVNode$4("span", { class: "rdp-title" }, "选择光鸭云盘目录", -1)),
+            _createVNode$4(_component_v_btn, {
+              variant: "text",
+              density: "comfortable",
+              size: "small",
+              icon: "mdi-close",
+              onClick: _cache[1] || (_cache[1] = $event => (dialog.value = false))
+            })
+          ]),
+          _createElementVNode$4("div", _hoisted_4$4, [
+            _createVNode$4(_component_v_btn, {
+              variant: "tonal",
+              density: "comfortable",
+              size: "small",
+              icon: "mdi-arrow-up",
+              disabled: !parentPath.value || loading.value,
+              title: "上一级",
+              onClick: goUp
+            }, null, 8, ["disabled"]),
+            _createVNode$4(_component_v_text_field, {
+              modelValue: pathInput.value,
+              "onUpdate:modelValue": _cache[2] || (_cache[2] = $event => ((pathInput).value = $event)),
+              label: "当前路径",
+              density: "compact",
+              variant: "outlined",
+              "hide-details": "",
+              class: "rdp-input",
+              onKeyup: _cache[3] || (_cache[3] = _withKeys$1($event => (browse(pathInput.value)), ["enter"]))
+            }, null, 8, ["modelValue"]),
+            _createVNode$4(_component_v_btn, {
+              variant: "tonal",
+              density: "comfortable",
+              size: "small",
+              icon: "mdi-refresh",
+              loading: loading.value,
+              title: "刷新",
+              onClick: _cache[4] || (_cache[4] = $event => (browse(currentPath.value)))
+            }, null, 8, ["loading"])
+          ]),
+          _createElementVNode$4("div", _hoisted_5$4, [
+            (loading.value)
+              ? (_openBlock$4(), _createElementBlock$4("div", _hoisted_6$4, "正在读取云盘目录..."))
+              : (error.value)
+                ? (_openBlock$4(), _createElementBlock$4("div", _hoisted_7$3, _toDisplayString$4(error.value), 1))
+                : (!items.value.length)
+                  ? (_openBlock$4(), _createElementBlock$4("div", _hoisted_8$3, "此目录下没有子文件夹"))
+                  : (_openBlock$4(true), _createElementBlock$4(_Fragment$2, { key: 3 }, _renderList$2(items.value, (entry) => {
+                      return (_openBlock$4(), _createElementBlock$4("div", {
+                        key: entry.path,
+                        class: "rdp-item",
+                        onClick: $event => (browse(entry.path))
+                      }, [
+                        _createVNode$4(_component_v_icon, {
+                          icon: "mdi-folder",
+                          size: "18",
+                          color: "#f59e0b"
+                        }),
+                        _createElementVNode$4("span", _hoisted_10$3, _toDisplayString$4(entry.name), 1),
+                        _createVNode$4(_component_v_icon, {
+                          icon: "mdi-chevron-right",
+                          size: "16",
+                          class: "rdp-item__arrow"
+                        })
+                      ], 8, _hoisted_9$3))
+                    }), 128))
+          ]),
+          _createElementVNode$4("div", _hoisted_11$3, [
+            _cache[8] || (_cache[8] = _createTextVNode$4(" 将选择：", -1)),
+            _createElementVNode$4("strong", null, _toDisplayString$4(currentPath.value || '/'), 1)
+          ]),
+          _cache[11] || (_cache[11] = _createElementVNode$4("div", { class: "rdp-hint" }, "也可以直接在输入框里手填新目录，上传时会自动创建。", -1)),
+          _createElementVNode$4("div", _hoisted_12$3, [
+            _createVNode$4(_component_v_btn, {
+              variant: "text",
+              onClick: _cache[5] || (_cache[5] = $event => (dialog.value = false))
+            }, {
+              default: _withCtx$4(() => [...(_cache[9] || (_cache[9] = [
+                _createTextVNode$4("取消", -1)
+              ]))]),
+              _: 1
+            }),
+            _createVNode$4(_component_v_btn, {
+              color: "primary",
+              disabled: loading.value,
+              onClick: choose
+            }, {
+              default: _withCtx$4(() => [...(_cache[10] || (_cache[10] = [
+                _createTextVNode$4("选择此目录", -1)
+              ]))]),
+              _: 1
+            }, 8, ["disabled"])
+          ])
+        ])
+      ]),
+      _: 1
+    }, 8, ["modelValue"])
+  ]))
+}
+}
+
+};
+const RemoteDirPicker = /*#__PURE__*/_export_sfc(_sfc_main$4, [['__scopeId',"data-v-0b994415"]]);
+
+const DirectorySync_vue_vue_type_style_index_0_scoped_d02218aa_lang = '';
 
 const {resolveComponent:_resolveComponent$3,createVNode:_createVNode$3,createTextVNode:_createTextVNode$3,createElementVNode:_createElementVNode$3,toDisplayString:_toDisplayString$3,withCtx:_withCtx$3,openBlock:_openBlock$3,createElementBlock:_createElementBlock$3,createCommentVNode:_createCommentVNode$3,createBlock:_createBlock$3} = await importShared('vue');
 
@@ -28,7 +301,6 @@ const _hoisted_17$1 = {
 };
 
 const {reactive: reactive$1,ref: ref$3,watch: watch$1} = await importShared('vue');
-
 
 
 const _sfc_main$3 = {
@@ -263,16 +535,13 @@ return (_ctx, _cache) => {
         }, null, 8, ["modelValue"])
       ]),
       _createElementVNode$3("div", _hoisted_11$2, [
-        _createVNode$3(_component_v_text_field, {
+        _createVNode$3(RemoteDirPicker, {
           modelValue: form.sync_remote_dir,
           "onUpdate:modelValue": _cache[6] || (_cache[6] = $event => ((form.sync_remote_dir) = $event)),
-          label: "光鸭目标目录",
-          placeholder: "/Media",
-          density: "compact",
-          variant: "outlined",
-          "hide-details": "",
-          class: "ds-input"
-        }, null, 8, ["modelValue"])
+          api: __props.api,
+          "plugin-id": __props.pluginId,
+          "source-plugin-id": __props.sourcePluginId
+        }, null, 8, ["modelValue", "api", "plugin-id", "source-plugin-id"])
       ]),
       _createElementVNode$3("div", _hoisted_12$2, [
         _createVNode$3(_component_v_text_field, {
@@ -369,9 +638,9 @@ return (_ctx, _cache) => {
 }
 
 };
-const DirectorySync = /*#__PURE__*/_export_sfc(_sfc_main$3, [['__scopeId',"data-v-f9283ea6"]]);
+const DirectorySync = /*#__PURE__*/_export_sfc(_sfc_main$3, [['__scopeId',"data-v-d02218aa"]]);
 
-const ManualUpload_vue_vue_type_style_index_0_scoped_de561c85_lang = '';
+const ManualUpload_vue_vue_type_style_index_0_scoped_30e45de6_lang = '';
 
 const {resolveComponent:_resolveComponent$2,createVNode:_createVNode$2,createTextVNode:_createTextVNode$2,createElementVNode:_createElementVNode$2,toDisplayString:_toDisplayString$2,withCtx:_withCtx$2,withKeys:_withKeys,openBlock:_openBlock$2,createElementBlock:_createElementBlock$2,createCommentVNode:_createCommentVNode$2,renderList:_renderList$1,Fragment:_Fragment$1,withModifiers:_withModifiers,createBlock:_createBlock$2,normalizeClass:_normalizeClass} = await importShared('vue');
 
@@ -406,7 +675,6 @@ const _hoisted_15$1 = {
 const _hoisted_16$1 = { class: "mu-actions" };
 
 const {computed: computed$2,onMounted: onMounted$2,ref: ref$2,watch} = await importShared('vue');
-
 
 
 const _sfc_main$2 = {
@@ -465,7 +733,8 @@ function formatSize(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
-function markRemoteDirTouched() {
+function onRemoteDirChange(next) {
+  uploadRemoteDir.value = next || '/';
   remoteDirTouched.value = true;
 }
 
@@ -583,7 +852,7 @@ return (_ctx, _cache) => {
           color: "#f59e0b",
           class: "mr-1"
         }),
-        _cache[5] || (_cache[5] = _createTextVNode$2(" 手动上传 ", -1))
+        _cache[4] || (_cache[4] = _createTextVNode$2(" 手动上传 ", -1))
       ]),
       _createVNode$2(_component_v_chip, {
         size: "x-small",
@@ -675,19 +944,13 @@ return (_ctx, _cache) => {
         ])
       ]),
       _createElementVNode$2("div", _hoisted_13$1, [
-        _createVNode$2(_component_v_text_field, {
-          modelValue: uploadRemoteDir.value,
-          "onUpdate:modelValue": [
-            _cache[4] || (_cache[4] = $event => ((uploadRemoteDir).value = $event)),
-            markRemoteDirTouched
-          ],
-          label: "光鸭目标目录",
-          density: "compact",
-          variant: "outlined",
-          "hide-details": "",
-          class: "mu-input",
-          placeholder: "/Media"
-        }, null, 8, ["modelValue"]),
+        _createVNode$2(RemoteDirPicker, {
+          "model-value": uploadRemoteDir.value,
+          api: __props.api,
+          "plugin-id": __props.pluginId,
+          "source-plugin-id": __props.sourcePluginId,
+          "onUpdate:modelValue": onRemoteDirChange
+        }, null, 8, ["model-value", "api", "plugin-id", "source-plugin-id"]),
         _createElementVNode$2("div", _hoisted_14$1, [
           (_openBlock$2(true), _createElementBlock$2(_Fragment$1, null, _renderList$1(selected.value, (item) => {
             return (_openBlock$2(), _createBlock$2(_component_v_chip, {
@@ -720,7 +983,7 @@ return (_ctx, _cache) => {
             "prepend-icon": "mdi-cloud-upload-outline",
             onClick: startUpload
           }, {
-            default: _withCtx$2(() => [...(_cache[6] || (_cache[6] = [
+            default: _withCtx$2(() => [...(_cache[5] || (_cache[5] = [
               _createTextVNode$2(" 开始上传 ", -1)
             ]))]),
             _: 1
@@ -731,7 +994,7 @@ return (_ctx, _cache) => {
                 variant: "text",
                 onClick: clearSelected
               }, {
-                default: _withCtx$2(() => [...(_cache[7] || (_cache[7] = [
+                default: _withCtx$2(() => [...(_cache[6] || (_cache[6] = [
                   _createTextVNode$2("清空", -1)
                 ]))]),
                 _: 1
@@ -751,7 +1014,7 @@ return (_ctx, _cache) => {
               _: 1
             }, 8, ["type"]))
           : _createCommentVNode$2("", true),
-        _cache[8] || (_cache[8] = _createElementVNode$2("div", { class: "mu-hint" }, "同名文件按「目录同步」的同名策略处理；手动上传不会删除本地源文件。", -1))
+        _cache[7] || (_cache[7] = _createElementVNode$2("div", { class: "mu-hint" }, "同名文件按「目录同步」的同名策略处理；手动上传不会删除本地源文件。", -1))
       ])
     ])
   ]))
@@ -759,7 +1022,7 @@ return (_ctx, _cache) => {
 }
 
 };
-const ManualUpload = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-de561c85"]]);
+const ManualUpload = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-30e45de6"]]);
 
 const UploadHistory_vue_vue_type_style_index_0_scoped_309d440e_lang = '';
 

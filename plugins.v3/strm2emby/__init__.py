@@ -60,6 +60,8 @@ from .models import (
     PluginConfigData,
     PluginConfigPayload,
     QrCodeData,
+    RemoteDirEntry,
+    RemoteListData,
     UploadHistoryData,
     UploadPayload,
     UploadProgressData,
@@ -103,7 +105,7 @@ class Strm2Emby(_PluginBase):
     plugin_name = "Strm2Emby"
     plugin_desc = "使 MoviePilot 存储支持光鸭云盘，内置目录同步、手动上传与 LitePan 联动。"
     plugin_icon = "https://raw.githubusercontent.com/tardlk/MoviePilot-Plugins/main/icons/Strm2Emby.png"
-    plugin_version = "1.1.1"
+    plugin_version = "1.1.2"
     plugin_author = "tardlk"
     author_url = "https://github.com/tardlk"
     plugin_config_prefix = "strm2emby_"
@@ -1060,6 +1062,14 @@ class Strm2Emby(_PluginBase):
                 "response_model": schemas.Response[FsListData],
             },
             {
+                "path": "/remote/list",
+                "endpoint": self.api_remote_list,
+                "auth": "bear",
+                "methods": ["GET"],
+                "summary": "浏览光鸭云盘目录（只读，仅返回子目录）",
+                "response_model": schemas.Response[RemoteListData],
+            },
+            {
                 "path": "/upload",
                 "endpoint": self.manual_upload,
                 "auth": "bear",
@@ -1822,6 +1832,55 @@ class Strm2Emby(_PluginBase):
             target=self.sync_directory, name="Strm2EmbyManualSync", daemon=True
         ).start()
         return schemas.Response(success=True, message="同步任务已触发，请查看插件日志")
+
+    # ── 云端目录浏览（目标目录选择器）──
+
+    def api_remote_list(self, path: str = "/") -> schemas.Response[RemoteListData]:
+        """
+        GET /remote/list：浏览光鸭云盘目录，供「光鸭目标目录」选择器使用。
+
+        只读：只返回子目录，不创建/删除任何云端条目。路径统一按 POSIX 规整，
+        拒绝 ``..`` 穿越；列举失败返回错误而不会伪装成「空目录」，避免选择器
+        把网络抖动误显示成「该目录下没有文件夹」。
+        """
+        raw = (path or "/").strip() or "/"
+        if not raw.startswith("/"):
+            raw = "/" + raw
+        candidate = PurePosixPath(raw)
+        if ".." in candidate.parts:
+            return schemas.Response(success=False, message="路径不合法")
+        normalized = candidate.as_posix()
+
+        if not self._guangya_api:
+            return schemas.Response(success=False, message="插件未初始化，请先登录光鸭云盘")
+        try:
+            folder = self._guangya_api.get_item(Path(normalized))
+            if not folder or folder.type != "dir":
+                return schemas.Response(
+                    success=False, message=f"目录不存在或不是目录：{normalized}"
+                )
+            children = self._guangya_api.list(folder) or []
+        except Exception as err:  # noqa: BLE001
+            logger.error(f"【Strm2Emby】浏览云端目录失败 {normalized}: {err}")
+            return schemas.Response(success=False, message=f"读取云端目录失败：{err}")
+
+        items: List[RemoteDirEntry] = []
+        seen = set()
+        for child in children:
+            name = getattr(child, "name", "") or ""
+            if getattr(child, "type", None) != "dir" or not name:
+                continue
+            child_path = (PurePosixPath(normalized) / name).as_posix()
+            if child_path in seen:
+                continue
+            seen.add(child_path)
+            items.append(RemoteDirEntry(name=name, path=child_path))
+        items.sort(key=lambda entry: entry.name.lower())
+        parent = candidate.parent.as_posix() if normalized != "/" else ""
+        return schemas.Response(
+            success=True,
+            data=RemoteListData(path=normalized, parent=parent, items=items),
+        )
 
     # ── 本地目录浏览与手动上传 ──
 

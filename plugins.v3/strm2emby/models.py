@@ -155,6 +155,22 @@ class FsListData(BaseModel):
     items: List[FsEntry] = Field(default_factory=list)
 
 
+class RemoteDirEntry(BaseModel):
+    """光鸭云盘上的一个子目录。"""
+
+    name: str
+    path: str
+    type: str = "dir"
+
+
+class RemoteListData(BaseModel):
+    """GET /remote/list 返回的云盘目录内容（仅目录，不含文件）。"""
+
+    path: str = "/"
+    parent: str = ""
+    items: List[RemoteDirEntry] = Field(default_factory=list)
+
+
 class UploadPayload(BaseModel):
     """POST /upload 的请求体。"""
 

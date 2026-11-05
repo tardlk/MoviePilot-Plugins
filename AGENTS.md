@@ -37,7 +37,7 @@ MoviePilot-Plugins/
     ├── build-zip.js              # 本地打包可上传安装的 zip
     ├── src/                      # 前端源码
     │   ├── main.js / App.vue
-    │   └── components/{Page,Config,AppPage,DirectorySync,ManualUpload,UploadHistory}.vue
+    │   └── components/{Page,Config,AppPage,DirectorySync,ManualUpload,UploadHistory,RemoteDirPicker}.vue
     ├── dist/                     # 前端构建产物（提交）
     └── README.md                 # 插件目录专属说明
 ```
@@ -124,6 +124,7 @@ def transfer_complete(self, event): ...
 | POST | `/login/logout` | 退出登录 |
 | GET | `/sync` | 立即触发一次全量目录同步（后台线程） |
 | GET | `/fs/list?path=` | 浏览 MP 主机目录（**超级管理员**，受 `fs_allowed_roots` 约束） |
+| GET | `/remote/list?path=` | 浏览光鸭云盘目录（**只读**，仅返回子目录；供「光鸭目标目录」选择器使用，`auth: bear`） |
 | POST | `/upload` | 手动上传 `{paths, remote_dir}`（**超级管理员**，后台线程，不删源文件） |
 | GET | `/progress` | 当前上传/同步进度（含逐文件 items） |
 | GET | `/history?limit=` | 上传/同步记录 |
