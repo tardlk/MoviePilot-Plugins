@@ -7,12 +7,12 @@
 
 ## 0. 一分钟速览
 
-- 这是什么：**MoviePilot V3 插件**，把「光鸭云盘」接入为 MoviePilot（下称 MP）的一种**存储**，并提供**目录同步**、**手动上传**、**上传记录/进度**、**LitePan 联动**。
+- 这是什么：**MoviePilot V3 插件**，把「光鸭云盘」接入为 MoviePilot（下称 MP）的一种**存储**，并在整理成功后**联动上传成品文件**，另提供**手动上传**、**上传记录/进度**、**LitePan 联动**。
 - 插件 ID / 主类 / 存储名 / 配置前缀：`Strm2Emby` / `Strm2Emby` / `Strm2Emby`（`_disk_name`）/ `strm2emby_`。
 - 仓库：`git@github.com:tardlk/MoviePilot-Plugins.git`（分支 `main`）。
 - 插件目录：`plugins.v3/strm2emby/`（目录名 = 类名小写，MP 硬约定）。
 - 前端：Vue3 + Vuetify + Module Federation，产物 `plugins.v3/strm2emby/dist/assets/`（**必须提交**，宿主加载 `remoteEntry.js`）。
-- 依赖：`apscheduler` / `oss2` / `watchfiles` **全部由 MP 宿主内置**；插件**不再放 `pyproject.toml`**（见 §7 坑位）。
+- 依赖：仅 `oss2` 由 MP 宿主内置（v1.2.0 起不再使用 `apscheduler` / `watchfiles`）；插件**不再放 `pyproject.toml`**（见 §7 坑位）。
 - 三个核心文件：`__init__.py`（主类）/ `guangya_client.py`（HTTP 传输层）/ `guangya_api.py`（存储语义层）。
 
 ---
@@ -29,7 +29,7 @@ MoviePilot-Plugins/
 ├── .github/workflows/release.yml # 推送 package.v3.json 变更时自动打 Release
 ├── icons/Strm2Emby.png
 └── plugins.v3/strm2emby/
-    ├── __init__.py               # 主类 Strm2Emby：生命周期/配置/API/存储契约/同步/上传/进度/事件
+    ├── __init__.py               # 主类 Strm2Emby：生命周期/配置/API/存储契约/整理联动/上传/进度/事件
     ├── guangya_client.py         # 传输层 GuangYaClient：请求头、错误码、token 刷新、限流、设备码登录、上传票据、OSS 分片
     ├── guangya_api.py            # 存储层 GuangYaApi：分页列举、get_item(_strict)、任务型增删改、上传/秒传、usage/snapshot、缓存
     ├── models.py                 # get_api() 的 Pydantic 请求/响应模型
@@ -104,7 +104,7 @@ def transfer_complete(self, event): ...
 - `transferinfo.success` / `overwrite_skipped`
 - `transferinfo.target_item`（**整理后目标文件**，我们要上传的）
 - `transferinfo.file_list_new`（目标文件清单，字符串路径列表）
-- `fileitem` 是下载源，会被「必须在 `sync_source_dir` 下」的过滤自然排除。
+- `fileitem` 是下载源；v1.2.0 起插件只收 `target_item` / `file_list_new`，不收顶层 `fileitem`。
 
 ### 2.4 出站 HTTP 与导入规范
 
@@ -122,7 +122,6 @@ def transfer_complete(self, event): ...
 | GET | `/login/qrcode` | 获取扫码二维码（每次重建 `device_id` 并持久化） |
 | GET | `/login/poll` | 轮询扫码登录，成功后持久化 token |
 | POST | `/login/logout` | 退出登录 |
-| GET | `/sync` | 立即触发一次全量目录同步（后台线程） |
 | GET | `/fs/list?path=` | 浏览 MP 主机目录（**超级管理员**，受 `fs_allowed_roots` 约束） |
 | GET | `/remote/list?path=` | 浏览光鸭云盘目录（**只读**，仅返回子目录；供「光鸭目标目录」选择器使用，`auth: bear`） |
 | POST | `/upload` | 手动上传 `{paths, remote_dir}`（**超级管理员**，后台线程，不删源文件） |
@@ -152,10 +151,12 @@ def transfer_complete(self, event): ...
 存储/登录：`enabled`、`access_token`、`refresh_token`、`client_id`、`device_id`、
 `poll_interval`、`page_size`、`order_by`、`sort_type`、`min_interval`、`permanently_delete`。
 
-目录同步：`sync_enabled`（**总开关**）、`sync_source_dir`（本地源，同时是整理联动的相对路径基准）、
-`sync_remote_dir`、`sync_watch`（实时监控）、`sync_watch_polling`（强制轮询）、
-`sync_poll_interval`（轮询间隔秒）、`sync_cron`、`sync_conflict`(`skip/overwrite/rename`)、
-`sync_delete_source`、`sync_extensions`、`sync_on_transfer`（整理联动）。
+整理联动：`sync_on_transfer`（开关）、`sync_remote_dir`（云端目标）、
+`sync_conflict`(`skip/overwrite/rename`，同名策略)。
+**没有本地源目录配置**：成品路径与媒体目录一律取自 `TransferComplete` 事件。
+联动开关独立于任何总开关；插件 `enabled` 必须为真。v1.2.0 起不再读写
+`sync_enabled` / `sync_source_dir` / `sync_watch*` / `sync_cron` /
+`sync_extensions` / `sync_delete_source`。
 
 安全：`fs_allowed_roots`（逗号分隔的允许浏览/上传根目录；空=不额外限制，仍需超管）。
 
@@ -185,49 +186,40 @@ LitePan：`litepan_enabled`、`litepan_base_url`、`litepan_api_key`（只写不
 
 ---
 
-## 6. 目录同步的三种触发
+## 6. 整理联动（唯一的自动触发）
 
-统一入口：`_sync_file(local, source, remote_root, exts, trigger, delete_source, on_progress, on_phase)`
-→ 过滤临时文件/扩展名 → 处理同名策略 → `get_folder(parent)` → `upload(...)` → 可选删源。
+v1.2.0 起移除了实时目录监控、强制轮询、Cron 定时与全量同步。插件**不再扫描本地目录**，
+唯一的自动上传入口是订阅 MoviePilot 整理完成事件。
 
-| 触发 | 常量 | 实现 | 依赖 |
-|---|---|---|---|
-| 整理联动 | `transfer` | `transfer_complete()` 事件 → 5s 去抖 → `_run_transfer_upload` | `EventType.TransferComplete` |
-| 目录监控 | `watch` | `_watch_loop` → `_run_watch` → `_handle_watch_batch` | `watchfiles`（inotify/轮询） |
-| 定时 | `sync` | `sync_directory()` 全量扫描 + `get_service()` 注册 Cron | `apscheduler` |
-| 手动 | `manual` | `manual_upload()` → `_run_manual_upload`（后台线程） | — |
+统一入口：`_sync_file(local, source, remote_root, trigger, on_progress, on_phase)`
+→ 过滤临时文件 → 处理同名策略 → `get_folder(parent)` → `upload(...)`。
+**本地源文件永不删除**。
 
-**整理联动过滤逻辑**（`transfer_complete`）：
-`self._enabled and self._sync_enabled and self._sync_on_transfer` → `transferinfo.success` 且非 `overwrite_skipped`
-→ 收集 `target_item` / `file_list_new` / 顶层 `fileitem` 并去重 → 仅保留「绝对路径 + 位于 `sync_source_dir` 下」
-→ 5s 去抖合并 → `_run_transfer_upload`（复用 `_sync_file`，`delete_source=False`，触发 `sync_on_transfer` 记进度/记录/LitePan）。
+`transfer_complete()`（`@eventmanager.register(EventType.TransferComplete)`）：
 
-⚠️ 注意：**整理联动目前受 `sync_enabled` 总开关约束**。只想「整理后才传」时，要 `sync_enabled=true`、
-`sync_watch=false`、`sync_cron=""`、`sync_on_transfer=true`。关掉总开关会把整理联动一起禁掉（已踩坑）。
+1. 前置条件 `self._enabled and self._sync_on_transfer`（**不再依赖 `sync_enabled`**，
+   v1.2.0 起联动开关完全独立，修掉了旧版「误关总开关导致联动失效」的坑）。
+2. 要求 `transferinfo.success` 且非 `overwrite_skipped`。
+3. 只收 `target_item` / `file_list_new`（**不收顶层 `fileitem`**，那是下载源），
+   按路径去重、要求绝对路径；`storage` 就是本插件时跳过（已在云端）。
+4. `_resolve_transfer_dir()` 从 `target_diritem` 推导本地基准目录与云端子目录名；
+   缺失时回退到目标文件所在目录，再缺失则按文件名扁平上传。
+5. 待上传集合按文件保存 `(source, subdir)`，5 秒去抖合并后交给后台线程
+   `_run_transfer_upload`；云端路径为 `sync_remote_dir / subdir / 相对路径`。
+   结果记入进度与上传记录，并在有成功上传时调度 LitePan 通知。
 
-### 目录监控的健壮性（对齐宿主做法）
-
-`_watch_loop` 先尝试 inotify，`_run_watch` 捕获异常后自动切 `force_polling=True` 轮询并退避重启：
-
-- 轮询模式才传 `ignore_permission_denied=True`；inotify 模式不传，保证权限问题能抛出并触发回退，而不是静默不监控。
-- `debounce=10000, step=1000`；轮询间隔取 `sync_poll_interval`（默认 2s）。
-- 退避 `_WATCH_BACKOFF = (5,15,30,60,120,300)`。
-
-**为什么需要轮询回退**：某些 NAS（如 UGREEN UGOS）的共享目录带「高级 ACL」（xattr `user.acl.v=1`），
-非 root 用户 `inotify_add_watch` 返回 `EACCES`，而 `stat/find` 正常。宿主 MP 的
-`app/monitor/watcher.py` 也是同样策略（`force_polling` + `ignore_permission_denied` + 退避）。
-
-**轮询开销**：每 `poll_delay_ms` 递归 stat（只读元数据，不读内容），成本随条目数线性增长；
-媒体库较大时建议间隔 30~60s，或改用 Cron。
+手动上传（`manual_upload` → `_run_manual_upload`）与联动共用 `_sync_lock` 和同一套同名策略，
+但它是用户主动触发的独立能力，不受联动开关影响。
 
 ### 并发与缓存
 
-- 全量/监控/整理联动共用一把 `self._sync_lock`。
-- 每轮开始 `GuangYaApi.clear_cache()`（清 `_id_cache`/`_item_cache`/`_dir_cache`），避免云端被外部删除后仍误判「已存在」。
+- 联动上传与手动上传共用一把 `self._sync_lock`。
+- 每轮开始 `GuangYaApi.clear_cache()`（清 `_id_cache`/`_item_cache`/`_dir_cache`）。
 - `GuangYaApi` 目录子项缓存只服务按名查询；对外 `list()` 始终 `refresh=True` 重新拉取。
 
 ---
 
+## 7. 排错手册（真实踩过的坑）
 ## 7. 排错手册（真实踩过的坑）
 
 | 现象 | 根因 | 处理 |
@@ -238,11 +230,8 @@ LitePan：`litepan_enabled`、`litepan_base_url`、`litepan_api_key`（只写不
 | 云端文件被外部删后重复同步仍「跳过」 | `_item_cache` 未失效 | 每轮 `clear_cache()` |
 | 大文件报「上传失败」但云端其实已有 | 156 秒传或 OSS 成功但确认超时 | 156 用 taskId 取回；OSS etag 后按已上传处理；搜日志 `上传诊断` |
 | **根目录列举为空 / 同步报「创建目录 /Media 失败」** | `file/get_file_list` 成功响应是 `{msg:"success",data:{...}}` **不含 `code`**，严格成功码校验误判为失败 | `_is_success_code` 在 code 缺失时接受 `msg=success`（v1.0.4 修复） |
-| **目录监控启动即崩 `Permission denied (os error 13)`** | 挂载/NAS 高级 ACL 不支持 inotify | 自动回退 `force_polling=True`；或勾选「强制轮询模式」（v1.0.3） |
 | **界面一直「依赖未就绪」`runtime_status=dependency_pending`** | 插件放了 `pyproject.toml`，MP 在**插件加载之后**才安装依赖且不重分类 | 移除 `pyproject.toml`（依赖宿主内置），重载插件（v1.1.1） |
-| 整理成功但没上传 | `sync_enabled`（总开关）被关，整理联动被一起禁用 | 保持 `sync_enabled=true`，关 `sync_watch`/`sync_cron` |
 | 登录接口 404（`account.guangyapan.com`） | 光鸭上游接口变更 | 更新 `guangya_client.py` |
-| 目录监控不触发 | 源目录无效 / 未启用 / 未登录 | 看 `strm2emby.log` 的「目录监控已启动/线程结束」 |
 
 ### 存储名变更注意
 
@@ -254,18 +243,24 @@ LitePan：`litepan_enabled`、`litepan_base_url`、`litepan_api_key`（只写不
 ## 8. 已知限制 / TODO
 
 - `exists()` 未做归属让路（非本存储返回 `False` 而非 `None`），与文件头约定不一致，建议修。
-- 整理联动受 `sync_enabled` 约束，误关总开关会失效；可考虑让整理联动独立、或在「联动开但总开关关」时告警。
 - `GET /config` 每次都实时请求光鸭 API 拉账户统计（状态页/前端刷新会触发）。
 - 未实现 `media_files`、`transfer`、`plan_transfer`/`execute_transfer_plan` 等整理计划内部接口。
 - 进度 `self._progress` 存内存，重载即清空；上传**记录**持久化（`save_data("upload_history")`，上限 500 条）。
-- 不同步空目录；不跟随软链接；不做媒体重命名（只按路径原样/整理后上传）。
+- 插件不重命名媒体文件：上传的是整理链产出的成品路径，按相对路径原样落到云端。
 - 大文件上传后光鸭列表索引有分钟级延迟，OSS 成功只做短等待即按「已上传」记录，最终一致。
-- `watchfiles` 的 `ignore_permission_denied` 需 `>=0.22`；宿主通常自带较新版本，但依赖已从插件移除
-  （不再由 MP 安装），若宿主过旧该参数会 `TypeError`。
 - `/fs/list` 浏览的是 **MP 容器内可见路径**，不是 NAS 全盘。
+
+### 从 1.1.x 升级
+
+v1.2.0 是破坏性变更：实时目录监控（含绿联 UGOS 高级 ACL 的 inotify 轮询回退）、Cron 定时、
+全量同步与 `GET /sync` 均已移除，「本地源目录」配置也一并去掉；相关配置字段（`sync_enabled`、`sync_watch*`、
+`sync_cron`、`sync_extensions`、`sync_delete_source`、`sync_source_dir`）不再读写，升级后由 `update_config()`
+整份替换自然清理。整理联动现在只依赖 `enabled` + `sync_on_transfer`。
+若仍需要监控 / 定时能力，请停留在 1.1.x。
 
 ---
 
+## 9. 安全
 ## 9. 安全
 
 - 不提交任何密钥；文档/脚本用占位符。
@@ -368,7 +363,6 @@ curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/jso
 - 插件事件类型：`schemas/types.py`（`EventType`、`ChainEventType`、`SystemConfigKey`）
 - 事件数据契约：`schemas/event.py`、`schemas/transfer.py`（`TransferInfo`）
 - 整理结果事件派发：`chain/transfer/settlement.py`
-- 目录监控（宿主实现，可借鉴）：`monitor/monitor.py`、`monitor/watcher.py`、`monitor/poller.py`、`monitor/syslimits.py`
 - 插件依赖与状态：`adapters/system/plugin/{manifest,package,dependency}.py`、`runtime/extensions/plugin/{lifecycle,registry}.py`
 - 前端联邦加载：`MoviePilot-Frontend/src/utils/federationLoader.ts`
 

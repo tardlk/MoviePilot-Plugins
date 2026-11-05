@@ -30,7 +30,6 @@
       :api="api"
       :plugin-id="pluginId"
       :source-plugin-id="sourcePluginId"
-      :logged-in="status.logged_in"
       :config="fullConfig"
       @update="onConfigUpdate"
     />
@@ -41,7 +40,6 @@
       :plugin-id="pluginId"
       :source-plugin-id="sourcePluginId"
       :logged-in="status.logged_in"
-      :default-source-dir="status.sync_source_dir"
       :default-remote-dir="status.sync_remote_dir"
     />
 
@@ -80,7 +78,6 @@ const status = reactive({
   logged_in: false,
   total_space: 0,
   used_space: 0,
-  sync_source_dir: '',
   sync_remote_dir: '/',
 })
 
@@ -100,7 +97,6 @@ async function loadStatus() {
     status.logged_in = Boolean(data?.data?.logged_in)
     status.total_space = Number(data?.data?.total_space || 0)
     status.used_space = Number(data?.data?.used_space || 0)
-    status.sync_source_dir = data?.data?.sync_source_dir || ''
     status.sync_remote_dir = data?.data?.sync_remote_dir || '/'
   } catch (error) {
     console.error('获取光鸭云盘状态失败', error)
@@ -114,7 +110,6 @@ function onConfigUpdate(data) {
     return
   }
   fullConfig.value = data
-  status.sync_source_dir = data.sync_source_dir || ''
   status.sync_remote_dir = data.sync_remote_dir || '/'
 }
 

@@ -2,37 +2,18 @@
   <div class="ds-card">
     <div class="ds-card__header">
       <span class="ds-card__title">
-        <v-icon icon="mdi-folder-sync-outline" size="18" color="#10b981" class="mr-1" />
-        目录同步
+        <v-icon icon="mdi-folder-move-outline" size="18" color="#10b981" class="mr-1" />
+        整理联动上传
       </span>
-      <v-chip :color="form.sync_enabled ? 'success' : 'grey'" size="x-small" variant="tonal">
-        {{ form.sync_enabled ? '已启用' : '未启用' }}
+      <v-chip :color="form.sync_on_transfer ? 'success' : 'grey'" size="x-small" variant="tonal">
+        {{ form.sync_on_transfer ? '已启用' : '未启用' }}
       </v-chip>
     </div>
 
     <div class="ds-grid">
       <div class="ds-item">
-        <v-switch v-model="form.sync_enabled" label="启用目录同步" density="compact" hide-details color="primary" />
-        <div class="ds-hint">把本地目录上传到光鸭云盘（独立于整理链）</div>
-      </div>
-      <div class="ds-item">
-        <v-switch v-model="form.sync_watch" label="目录监控（实时）" density="compact" hide-details color="primary" />
-        <div class="ds-hint">基于 watchfiles 实时上传，可不填 Cron；inotify 不可用时自动回退轮询</div>
-      </div>
-      <div class="ds-item">
-        <v-switch v-model="form.sync_watch_polling" label="强制轮询模式" density="compact" hide-details color="primary" :disabled="!form.sync_watch" />
-        <div class="ds-hint">网络盘/带高级 ACL 的目录不支持 inotify 时勾选（否则会自动回退）</div>
-      </div>
-      <div class="ds-item">
-        <v-text-field v-model.number="form.sync_poll_interval" label="轮询扫描间隔（秒）" type="number" min="1" density="compact" variant="outlined" hide-details class="ds-input" :disabled="!form.sync_watch" />
-        <div class="ds-hint">仅轮询模式下生效，默认 2 秒</div>
-      </div>
-      <div class="ds-item">
-        <v-switch v-model="form.sync_on_transfer" label="整理联动（整理成功后上传）" density="compact" hide-details color="primary" />
-        <div class="ds-hint">仅上传 MP「整理完成」后落入本地源目录的文件，最精准；建议与监控/Cron 并用</div>
-      </div>
-      <div class="ds-item">
-        <v-text-field v-model="form.sync_source_dir" label="本地源目录" placeholder="/vol2/1000/Vol2/Media" density="compact" variant="outlined" hide-details class="ds-input" />
+        <v-switch v-model="form.sync_on_transfer" label="整理成功后自动上传" density="compact" hide-details color="primary" />
+        <div class="ds-hint">订阅 MoviePilot「整理完成」事件，自动读取整理后的成品文件与媒体目录并上传；无需填写本地路径，不扫描目录、不参与整理过程。</div>
       </div>
       <div class="ds-item">
         <RemoteDirPicker
@@ -43,24 +24,14 @@
         />
       </div>
       <div class="ds-item">
-        <v-text-field v-model="form.sync_cron" label="同步周期（Cron）" placeholder="0 3 * * *" density="compact" variant="outlined" hide-details class="ds-input" />
-      </div>
-      <div class="ds-item">
         <v-select v-model="form.sync_conflict" :items="conflictOptions" item-title="title" item-value="value" label="同名文件处理" density="compact" variant="outlined" hide-details class="ds-input" />
-      </div>
-      <div class="ds-item">
-        <v-text-field v-model="form.sync_extensions" label="仅同步扩展名（可选）" placeholder=".mkv,.mp4,.srt" density="compact" variant="outlined" hide-details class="ds-input" />
-      </div>
-      <div class="ds-item">
-        <v-switch v-model="form.sync_delete_source" label="上传成功后删除本地" density="compact" hide-details color="error" />
-        <div class="ds-hint">谨慎开启，删除不可恢复</div>
+        <div class="ds-hint">云端已有同名文件时的处理方式，默认跳过</div>
       </div>
     </div>
 
     <div class="ds-actions">
-      <v-btn color="primary" :loading="saving" @click="save">保存同步设置</v-btn>
-      <v-btn variant="tonal" prepend-icon="mdi-sync" :loading="syncing" :disabled="!loggedIn" @click="runNow">立即同步</v-btn>
-      <span v-if="!loggedIn" class="ds-hint">未登录光鸭云盘，无法同步</span>
+      <v-btn color="primary" :loading="saving" @click="save">保存设置</v-btn>
+      <span class="ds-hint">上传记录与逐文件进度见下方「上传记录」</span>
     </div>
 
     <v-alert v-if="feedback.text" :type="feedback.type || 'info'" variant="tonal" density="compact">
@@ -77,8 +48,7 @@ const props = defineProps({
   api: { type: Object, default: () => ({}) },
   pluginId: { type: String, default: '' },
   sourcePluginId: { type: String, default: '' },
-  loggedIn: { type: Boolean, default: false },
-  // 父组件传入的完整插件配置（含 sync_* 字段）
+  // 父组件传入的完整插件配置
   config: { type: Object, default: () => ({}) },
 })
 
@@ -91,20 +61,11 @@ const conflictOptions = [
 ]
 
 const form = reactive({
-  sync_enabled: false,
-  sync_watch: false,
-  sync_watch_polling: false,
-  sync_poll_interval: 2,
-  sync_source_dir: '',
-  sync_remote_dir: '/',
-  sync_cron: '',
-  sync_conflict: 'skip',
-  sync_delete_source: false,
-  sync_extensions: '',
   sync_on_transfer: false,
+  sync_remote_dir: '/',
+  sync_conflict: 'skip',
 })
 const saving = ref(false)
-const syncing = ref(false)
 const feedback = ref({ type: '', text: '' })
 
 function currentPluginId() {
@@ -113,11 +74,8 @@ function currentPluginId() {
 
 async function request(path, options = {}) {
   const apiPath = `plugin/${currentPluginId()}${path}`
-  if (options.method === 'POST' && props.api?.post) {
+  if (props.api?.post) {
     return props.api.post(apiPath, options.body ? JSON.parse(options.body) : {}, { feedback: 'silent', ...options })
-  }
-  if (options.method !== 'POST' && props.api?.get) {
-    return props.api.get(apiPath, { feedback: 'silent', ...options })
   }
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) }
   const response = await fetch(`/api/v1/${apiPath}`, { headers, ...options })
@@ -125,17 +83,9 @@ async function request(path, options = {}) {
 }
 
 function applyConfig(config = {}) {
-  form.sync_enabled = Boolean(config.sync_enabled)
-  form.sync_watch = Boolean(config.sync_watch)
-  form.sync_watch_polling = Boolean(config.sync_watch_polling)
-  form.sync_poll_interval = Number(config.sync_poll_interval || 2)
-  form.sync_source_dir = config.sync_source_dir || ''
-  form.sync_remote_dir = config.sync_remote_dir || '/'
-  form.sync_cron = config.sync_cron || ''
-  form.sync_conflict = config.sync_conflict || (config.sync_overwrite ? 'overwrite' : 'skip')
-  form.sync_delete_source = Boolean(config.sync_delete_source)
-  form.sync_extensions = config.sync_extensions || ''
   form.sync_on_transfer = Boolean(config.sync_on_transfer)
+  form.sync_remote_dir = config.sync_remote_dir || '/'
+  form.sync_conflict = config.sync_conflict || 'skip'
 }
 
 watch(() => props.config, (value) => applyConfig(value), { immediate: true, deep: true })
@@ -147,17 +97,9 @@ async function save() {
     const result = await request('/config', {
       method: 'POST',
       body: JSON.stringify({
-        sync_enabled: form.sync_enabled,
-        sync_watch: form.sync_watch,
-        sync_watch_polling: form.sync_watch_polling,
-        sync_poll_interval: Number(form.sync_poll_interval || 2),
-        sync_source_dir: form.sync_source_dir,
-        sync_remote_dir: form.sync_remote_dir,
-        sync_cron: form.sync_cron,
-        sync_conflict: form.sync_conflict,
-        sync_delete_source: form.sync_delete_source,
-        sync_extensions: form.sync_extensions,
         sync_on_transfer: form.sync_on_transfer,
+        sync_remote_dir: form.sync_remote_dir,
+        sync_conflict: form.sync_conflict,
       }),
     })
     if (!result.success) {
@@ -168,28 +110,11 @@ async function save() {
       applyConfig(result.data)
       emit('update', result.data)
     }
-    feedback.value = { type: 'success', text: result.message || '同步设置已保存' }
+    feedback.value = { type: 'success', text: result.message || '设置已保存' }
   } catch (error) {
     feedback.value = { type: 'error', text: `保存失败：${error.message || error}` }
   } finally {
     saving.value = false
-  }
-}
-
-async function runNow() {
-  syncing.value = true
-  feedback.value = { type: 'info', text: '正在同步，请稍候...' }
-  try {
-    const result = await request('/sync')
-    if (!result.success) {
-      feedback.value = { type: 'error', text: result.message || '同步失败' }
-    } else {
-      feedback.value = { type: 'success', text: result.message || '同步任务已执行，请查看插件日志' }
-    }
-  } catch (error) {
-    feedback.value = { type: 'error', text: `同步失败：${error.message || error}` }
-  } finally {
-    syncing.value = false
   }
 }
 </script>

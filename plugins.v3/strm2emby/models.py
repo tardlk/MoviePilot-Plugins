@@ -44,16 +44,8 @@ class PluginConfigData(BaseModel):
     min_interval: float = 0.0
     permanently_delete: bool = False
 
-    sync_enabled: bool = False
-    sync_source_dir: str = ""
     sync_remote_dir: str = "/"
-    sync_watch: bool = False
-    sync_watch_polling: bool = False
-    sync_poll_interval: int = 2
-    sync_cron: str = ""
     sync_conflict: str = "skip"
-    sync_delete_source: bool = False
-    sync_extensions: str = ""
     sync_on_transfer: bool = False
 
     fs_allowed_roots: str = ""
@@ -98,16 +90,8 @@ class PluginConfigPayload(BaseModel):
     min_interval: Optional[float] = None
     permanently_delete: Optional[bool] = None
 
-    sync_enabled: Optional[bool] = None
-    sync_source_dir: Optional[str] = None
     sync_remote_dir: Optional[str] = None
-    sync_watch: Optional[bool] = None
-    sync_watch_polling: Optional[bool] = None
-    sync_poll_interval: Optional[int] = None
-    sync_cron: Optional[str] = None
     sync_conflict: Optional[str] = None
-    sync_delete_source: Optional[bool] = None
-    sync_extensions: Optional[str] = None
     sync_on_transfer: Optional[bool] = None
 
     fs_allowed_roots: Optional[str] = None

@@ -120,8 +120,6 @@ let wasActive = false
 const filterOptions = [
   { title: '全部', value: 'all' },
   { title: '手动上传', value: 'manual' },
-  { title: '目录同步', value: 'sync' },
-  { title: '目录监控', value: 'watch' },
   { title: '整理联动', value: 'transfer' },
 ]
 

@@ -95,7 +95,7 @@
         <v-alert v-if="feedback.text" :type="feedback.type || 'info'" variant="tonal" density="compact">
           {{ feedback.text }}
         </v-alert>
-        <div class="mu-hint">同名文件按「目录同步」的同名策略处理；手动上传不会删除本地源文件。</div>
+        <div class="mu-hint">同名文件按上方设置的同名策略处理；手动上传不会删除本地源文件。</div>
       </div>
     </div>
   </div>

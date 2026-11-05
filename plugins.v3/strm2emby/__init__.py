@@ -1,9 +1,9 @@
 """
-Strm2Emby —— 让 MoviePilot 把「光鸭云盘」当作存储使用，并提供目录同步、
-手动上传、上传记录与 LitePan 联动。
+Strm2Emby —— 让 MoviePilot 把「光鸭云盘」当作存储使用，并在整理成功后
+联动上传成品文件，另提供手动上传、上传记录与 LitePan 联动。
 
 文件结构：
-- 本文件：插件主类，负责生命周期、配置、API、存储契约转发、目录同步与联动；
+- 本文件：插件主类，负责生命周期、配置、API、存储契约转发、整理联动与上传；
 - ``guangya_client.py``：传输层，只提供原子 HTTP 能力；
 - ``guangya_api.py``：存储语义层，把云盘 API 翻译为 MoviePilot 的 FileItem 语义；
 - ``models.py``：API 请求/响应数据模型。
@@ -37,7 +37,6 @@ import uuid
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional, Tuple
 
-from apscheduler.triggers.cron import CronTrigger
 from fastapi import Depends
 
 from app import schemas
@@ -75,10 +74,8 @@ CONFLICT_OVERWRITE = "overwrite"
 CONFLICT_RENAME = "rename"
 CONFLICT_CHOICES = (CONFLICT_SKIP, CONFLICT_OVERWRITE, CONFLICT_RENAME)
 
-# 上传/同步触发来源
+# 上传触发来源
 TRIGGER_MANUAL = "manual"
-TRIGGER_SYNC = "sync"
-TRIGGER_WATCH = "watch"
 TRIGGER_TRANSFER = "transfer"
 
 # 整理联动去抖秒数：一批整理事件静默该时长后合并为一次上传
@@ -103,9 +100,9 @@ class Strm2Emby(_PluginBase):
 
     # ── 插件元信息 ──
     plugin_name = "Strm2Emby"
-    plugin_desc = "使 MoviePilot 存储支持光鸭云盘，内置目录同步、手动上传与 LitePan 联动。"
+    plugin_desc = "使 MoviePilot 存储支持光鸭云盘，整理成功后联动上传，并提供手动上传与 LitePan 联动。"
     plugin_icon = "https://raw.githubusercontent.com/tardlk/MoviePilot-Plugins/main/icons/Strm2Emby.png"
-    plugin_version = "1.1.2"
+    plugin_version = "1.2.0"
     plugin_author = "tardlk"
     author_url = "https://github.com/tardlk"
     plugin_config_prefix = "strm2emby_"
@@ -131,11 +128,6 @@ class Strm2Emby(_PluginBase):
     _DEFAULT_SORT_TYPE = 1
     _DEFAULT_MIN_INTERVAL = 0.0
     _DEFAULT_DEBOUNCE = 30
-    # 目录监控轮询模式默认扫描间隔（秒）；inotify 不可用（如挂载/ACL 拒绝）时回退使用
-    _DEFAULT_WATCH_POLL_SECONDS = 2
-
-    # 目录监控异常退出后的重启退避秒数（对齐宿主 LocalDirectoryWatcher）
-    _WATCH_BACKOFF = (5, 15, 30, 60, 120, 300)
 
     script_path = os.path.abspath(__file__)
     script_dir = os.path.dirname(script_path)
@@ -162,17 +154,9 @@ class Strm2Emby(_PluginBase):
         self._min_interval = self._DEFAULT_MIN_INTERVAL
         self._permanently_delete = False
 
-        # 目录同步
-        self._sync_enabled = False
-        self._sync_source_dir = ""
+        # 整理联动
         self._sync_remote_dir = "/"
-        self._sync_watch = False
-        self._sync_watch_polling = False
-        self._sync_poll_interval = self._DEFAULT_WATCH_POLL_SECONDS
-        self._sync_cron = ""
         self._sync_conflict = CONFLICT_SKIP
-        self._sync_delete_source = False
-        self._sync_extensions = ""
         self._sync_on_transfer = False
 
         # 允许浏览/手动上传的本地根目录（逗号分隔，空表示不额外限制）
@@ -197,13 +181,11 @@ class Strm2Emby(_PluginBase):
 
         # 并发控制
         self._sync_lock = threading.Lock()
-        self._watch_thread: Optional[threading.Thread] = None
-        self._watch_stop: Optional[threading.Event] = None
         self._litepan_lock = threading.Lock()
         self._litepan_timer: Optional[threading.Timer] = None
         # 整理联动：待上传文件去抖合并
         self._transfer_lock = threading.Lock()
-        self._transfer_pending: Dict[str, float] = {}
+        self._transfer_pending: Dict[str, Dict[str, Any]] = {}
         self._transfer_timer: Optional[threading.Timer] = None
         self._progress_lock = threading.Lock()
 
@@ -234,7 +216,6 @@ class Strm2Emby(_PluginBase):
         self._reset_progress()
         self._cancel_transfer_notify()
         self._cancel_litepan_notify()
-        self._restart_watch()
 
     def _load_config(self, config: dict) -> None:
         """从配置字典读取全部字段到实例属性。"""
@@ -268,18 +249,8 @@ class Strm2Emby(_PluginBase):
         self._min_interval = max(_as_float("min_interval", self._DEFAULT_MIN_INTERVAL), 0.0)
         self._permanently_delete = bool(config.get("permanently_delete"))
 
-        self._sync_enabled = bool(config.get("sync_enabled"))
-        self._sync_source_dir = (config.get("sync_source_dir") or "").strip()
         self._sync_remote_dir = (config.get("sync_remote_dir") or "").strip() or "/"
-        self._sync_watch = bool(config.get("sync_watch"))
-        self._sync_watch_polling = bool(config.get("sync_watch_polling"))
-        self._sync_poll_interval = max(
-            _as_int("sync_poll_interval", self._DEFAULT_WATCH_POLL_SECONDS), 1
-        )
-        self._sync_cron = (config.get("sync_cron") or "").strip()
         self._sync_conflict = self._normalize_conflict(config.get("sync_conflict"))
-        self._sync_delete_source = bool(config.get("sync_delete_source"))
-        self._sync_extensions = (config.get("sync_extensions") or "").strip()
         self._sync_on_transfer = bool(config.get("sync_on_transfer"))
 
         self._fs_allowed_roots = (config.get("fs_allowed_roots") or "").strip()
@@ -423,16 +394,8 @@ class Strm2Emby(_PluginBase):
             "sort_type": cls._DEFAULT_SORT_TYPE,
             "min_interval": cls._DEFAULT_MIN_INTERVAL,
             "permanently_delete": False,
-            "sync_enabled": False,
-            "sync_source_dir": "",
             "sync_remote_dir": "/",
-            "sync_watch": False,
-            "sync_watch_polling": False,
-            "sync_poll_interval": cls._DEFAULT_WATCH_POLL_SECONDS,
-            "sync_cron": "",
             "sync_conflict": CONFLICT_SKIP,
-            "sync_delete_source": False,
-            "sync_extensions": "",
             "sync_on_transfer": False,
             "fs_allowed_roots": "",
             "litepan_enabled": False,
@@ -451,8 +414,7 @@ class Strm2Emby(_PluginBase):
         return []
 
     def stop_service(self):
-        """退出插件：停止目录监控线程、整理联动去抖与待发送的联动通知。"""
-        self._stop_watch()
+        """退出插件：取消整理联动去抖与待发送的联动通知。"""
         self._cancel_transfer_notify()
         self._cancel_litepan_notify()
         self._reset_progress()
@@ -465,7 +427,7 @@ class Strm2Emby(_PluginBase):
 
         MoviePilot V3 的 ``update_config()`` 是整份替换而非按字段合并，
         因此任何一次持久化都必须提交完整字段，否则会把未提交的配置
-        （例如目录同步、token）清空。
+        （例如联动设置、token）清空。
         """
         return {
             "enabled": self._enabled,
@@ -479,16 +441,8 @@ class Strm2Emby(_PluginBase):
             "sort_type": self._sort_type,
             "min_interval": self._min_interval,
             "permanently_delete": self._permanently_delete,
-            "sync_enabled": self._sync_enabled,
-            "sync_source_dir": self._sync_source_dir,
             "sync_remote_dir": self._sync_remote_dir,
-            "sync_watch": self._sync_watch,
-            "sync_watch_polling": self._sync_watch_polling,
-            "sync_poll_interval": self._sync_poll_interval,
-            "sync_cron": self._sync_cron,
             "sync_conflict": self._sync_conflict,
-            "sync_delete_source": self._sync_delete_source,
-            "sync_extensions": self._sync_extensions,
             "sync_on_transfer": self._sync_on_transfer,
             "fs_allowed_roots": self._fs_allowed_roots,
             "litepan_enabled": self._litepan_enabled,
@@ -506,7 +460,7 @@ class Strm2Emby(_PluginBase):
         以当前内存配置为基线，叠加本次提交的字段，返回完整配置。
 
         支持前端只提交部分字段（例如登录成功后仅提交 enabled），未提交的字段
-        保持原值，避免误清 token、目录同步等设置。
+        保持原值，避免误清 token、联动等设置。
         """
         payload = payload or {}
         base = self._full_config()
@@ -549,20 +503,10 @@ class Strm2Emby(_PluginBase):
                 float(payload.get("min_interval", base.get("min_interval", 0.0)) or 0.0), 0.0
             ),
             "permanently_delete": _as_bool("permanently_delete"),
-            "sync_enabled": _as_bool("sync_enabled"),
-            "sync_source_dir": _as_str("sync_source_dir"),
             "sync_remote_dir": _as_str("sync_remote_dir", "/") or "/",
-            "sync_watch": _as_bool("sync_watch"),
-            "sync_watch_polling": _as_bool("sync_watch_polling"),
-            "sync_poll_interval": max(
-                _as_int("sync_poll_interval", self._DEFAULT_WATCH_POLL_SECONDS), 1
-            ),
-            "sync_cron": _as_str("sync_cron"),
             "sync_conflict": self._normalize_conflict(
                 payload["sync_conflict"] if "sync_conflict" in payload else base.get("sync_conflict")
             ),
-            "sync_delete_source": _as_bool("sync_delete_source"),
-            "sync_extensions": _as_str("sync_extensions"),
             "sync_on_transfer": _as_bool("sync_on_transfer"),
             "fs_allowed_roots": _as_str("fs_allowed_roots"),
             "litepan_enabled": _as_bool("litepan_enabled"),
@@ -611,16 +555,8 @@ class Strm2Emby(_PluginBase):
             "sort_type": self._sort_type,
             "min_interval": self._min_interval,
             "permanently_delete": self._permanently_delete,
-            "sync_enabled": self._sync_enabled,
-            "sync_source_dir": self._sync_source_dir,
             "sync_remote_dir": self._sync_remote_dir,
-            "sync_watch": self._sync_watch,
-            "sync_watch_polling": self._sync_watch_polling,
-            "sync_poll_interval": self._sync_poll_interval,
-            "sync_cron": self._sync_cron,
             "sync_conflict": self._sync_conflict,
-            "sync_delete_source": self._sync_delete_source,
-            "sync_extensions": self._sync_extensions,
             "sync_on_transfer": self._sync_on_transfer,
             "fs_allowed_roots": self._fs_allowed_roots,
             "litepan_enabled": self._litepan_enabled,
@@ -1046,14 +982,6 @@ class Strm2Emby(_PluginBase):
                 "response_model": schemas.Response[dict],
             },
             {
-                "path": "/sync",
-                "endpoint": self.api_sync,
-                "auth": "bear",
-                "methods": ["GET"],
-                "summary": "立即执行一次目录同步",
-                "response_model": schemas.Response[dict],
-            },
-            {
                 "path": "/fs/list",
                 "endpoint": self.list_local_dir,
                 "auth": "bear",
@@ -1240,14 +1168,16 @@ class Strm2Emby(_PluginBase):
     @eventmanager.register(EventType.TransferComplete)
     def transfer_complete(self, event: Event):
         """
-        整理完成事件：把**整理成功后**落入本地媒体库的文件同步上传到光鸭。
+        整理完成事件：把 MoviePilot 整理成功后的成品文件上传到光鸭云盘。
 
-        仅处理成功整理、目标为本机本地路径、且位于「本地源目录」下的文件；
-        若整理目标本身就是光鸭存储（已在云端），跳过以免重复上传。
-        多个事件会去抖合并成一批，避免逐文件触发大量线程。
+        不再需要用户配置「本地源目录」：文件路径取自 transferinfo.target_item /
+        file_list_new，目录信息取自 transferinfo.target_diritem（宿主标记的转移后媒体目录）。
+        只收整理后的成品，不收事件顶层的 fileitem（那是下载源文件）。
+        多个事件 5 秒去抖合并成一批，避免逐文件触发大量线程。
+        联动开关完全独立，只要插件启用且开启本联动即生效。
         """
         try:
-            if not (self._enabled and self._sync_enabled and self._sync_on_transfer):
+            if not (self._enabled and self._sync_on_transfer):
                 return
             data = event.event_data or {}
             transferinfo = self._event_get(data, "transferinfo")
@@ -1258,22 +1188,23 @@ class Strm2Emby(_PluginBase):
             # 覆盖模式下判定「不覆盖」而放弃，属正常策略裁决，无新文件
             if bool(self._event_get(transferinfo, "overwrite_skipped", False)):
                 return
-            source_root = Path(self._sync_source_dir) if self._sync_source_dir else None
-            if not source_root:
-                return
-            files: List[str] = []
-            for path, storage in self._collect_transfer_targets(data, transferinfo):
+
+            source_root, subdir = self._resolve_transfer_dir(transferinfo)
+            jobs: List[Tuple[str, Optional[Path], str]] = []
+            for path, storage in self._collect_transfer_targets(transferinfo):
+                # 整理目标本身就是光鸭存储时跳过，避免重复上传
                 if storage and storage == self._disk_name:
                     continue
                 target = Path(path)
                 if not target.is_absolute():
                     continue
-                if target != source_root and source_root not in target.parents:
+                # 有基准时只收该媒体目录下的成品；无基准时信任 target_item / file_list_new
+                if source_root and target != source_root and source_root not in target.parents:
                     continue
-                files.append(target.as_posix())
-            if not files:
+                jobs.append((target.as_posix(), source_root, subdir))
+            if not jobs:
                 return
-            self._schedule_transfer_upload(files)
+            self._schedule_transfer_upload(jobs)
         except Exception as err:  # noqa: BLE001
             logger.error(f"【Strm2Emby】整理联动处理失败: {err}")
 
@@ -1286,10 +1217,43 @@ class Strm2Emby(_PluginBase):
             return obj.get(key, default)
         return getattr(obj, key, default)
 
+    @classmethod
+    def _resolve_transfer_dir(cls, transferinfo: Any) -> Tuple[Optional[Path], str]:
+        """
+        从整理事件推导「本地基准目录」与「云端子目录名」。
+
+        优先使用 ``transferinfo.target_diritem``（宿主标记的转移后媒体目录，
+        通常是片名 / 剧名目录）；缺失时回退到 target_item 或 file_list_new
+        所在的目录。三者都不可用时返回 ``(None, "")``，由 ``_sync_file``
+        直接按文件名上传。
+
+        :return: (本地基准目录, 云端子目录名)。子目录名即媒体目录名，
+            用于在不手填源目录的前提下保留一层片名目录、避免同名文件互相覆盖。
+        """
+        diritem = cls._event_get(transferinfo, "target_diritem")
+        raw = cls._event_get(diritem, "path") if diritem else None
+        if not raw:
+            target_item = cls._event_get(transferinfo, "target_item")
+            item_path = cls._event_get(target_item, "path") if target_item else None
+            if not item_path:
+                files_new = cls._event_get(transferinfo, "file_list_new") or []
+                item_path = next(
+                    (str(x) for x in files_new if isinstance(x, (str, Path))), None
+                )
+            if item_path:
+                raw = Path(str(item_path)).parent.as_posix()
+        if not raw:
+            return None, ""
+        root = Path(str(raw))
+        name = root.name
+        if not name or root.as_posix() == "/":
+            return None, ""
+        return root, name
+
     def _collect_transfer_targets(
-        self, data: Any, transferinfo: Any
+        self, transferinfo: Any
     ) -> List[Tuple[str, Optional[str]]]:
-        """从整理事件中收集目标文件 (路径, storage) 列表，按路径去重。"""
+        """从整理事件收集整理后的成品文件 (路径, storage)，按路径去重。"""
         targets: List[Tuple[str, Optional[str]]] = []
         seen: set = set()
 
@@ -1310,20 +1274,25 @@ class Strm2Emby(_PluginBase):
             seen.add(path)
             targets.append((path, storage))
 
-        # 优先整理结果里的目标文件，其次事件顶层 fileitem 兜底
+        # 只收整理后的成品。事件顶层 fileitem 是下载源，绝不上传。
         _add(self._event_get(transferinfo, "target_item"))
         files_new = self._event_get(transferinfo, "file_list_new") or []
         if isinstance(files_new, (list, tuple, set)):
             for item in files_new:
                 _add(item)
-        _add(self._event_get(data, "fileitem"))
         return targets
 
-    def _schedule_transfer_upload(self, files: List[str]) -> None:
+    def _schedule_transfer_upload(
+        self, jobs: List[Tuple[str, Optional[Path], str]]
+    ) -> None:
         """把整理后的文件加入待上传集合，去抖合并后统一上传。"""
         with self._transfer_lock:
-            for path in files:
-                self._transfer_pending[path] = time.time()
+            for path, source, subdir in jobs:
+                self._transfer_pending[path] = {
+                    "source": source,
+                    "subdir": subdir,
+                    "ts": time.time(),
+                }
             if self._transfer_timer is not None:
                 self._transfer_timer.cancel()
             self._transfer_timer = threading.Timer(
@@ -1344,24 +1313,26 @@ class Strm2Emby(_PluginBase):
         """去抖到期：批量上传整理后的文件（后台线程执行）。"""
         with self._transfer_lock:
             self._transfer_timer = None
-            files = [Path(p) for p in self._transfer_pending]
+            jobs = [
+                (Path(path), info.get("source"), info.get("subdir") or "")
+                for path, info in self._transfer_pending.items()
+            ]
             self._transfer_pending.clear()
-        if not files:
+        if not jobs:
             return
         threading.Thread(
             target=self._run_transfer_upload,
-            args=(files,),
+            args=(jobs,),
             name="Strm2EmbyTransferSync",
             daemon=True,
         ).start()
 
-    def _run_transfer_upload(self, files: List[Path]) -> None:
-        """后台批量上传整理后的文件（复用单文件同步逻辑）。"""
+    def _run_transfer_upload(
+        self, jobs: List[Tuple[Path, Optional[Path], str]]
+    ) -> None:
+        """后台批量上传整理后的文件（复用单文件上传逻辑）。"""
         if not self._guangya_api:
             logger.error("【Strm2Emby】整理联动上传失败：插件未初始化或未登录")
-            return
-        source_root = Path(self._sync_source_dir) if self._sync_source_dir else None
-        if not source_root:
             return
         stats = {"uploaded": 0, "skipped": 0, "failed": 0}
         records: List[Dict[str, Any]] = []
@@ -1370,18 +1341,17 @@ class Strm2Emby(_PluginBase):
                 remote_root = self._prepare_remote()
                 if remote_root is None:
                     return
-                targets = [item for item in files if item.is_file()]
+                targets = [job for job in jobs if job[0].is_file()]
                 self._begin_progress(TRIGGER_TRANSFER, len(targets), "整理联动上传中")
-                for local in targets:
+                for local, source, subdir in targets:
                     size = local.stat().st_size if local.is_file() else 0
                     row = self._start_progress_item(local.name, local.as_posix(), size)
+                    target_root = remote_root / subdir if subdir else remote_root
                     result = self._sync_file(
                         local,
-                        source_root,
-                        remote_root,
-                        set(),
+                        source,
+                        target_root,
                         trigger=TRIGGER_TRANSFER,
-                        delete_source=False,
                         on_progress=lambda percent, _row=row: self._update_progress_item(
                             _row, percent=percent
                         ),
@@ -1570,7 +1540,7 @@ class Strm2Emby(_PluginBase):
         获取目录，不存在时自动创建。
 
         供 StorageChain.get_folder() 等公共存储入口使用，使其它插件
-        （如目录同步）能够定位/创建光鸭云盘上的目标目录。
+        （如整理联动）能够定位/创建光鸭云盘上的目标目录。
         """
         if not self._own_storage(storage):
             return None
@@ -1770,7 +1740,7 @@ class Strm2Emby(_PluginBase):
 
             self._access_token = result.get("access_token") or ""
             self._refresh_token = result.get("refresh_token") or ""
-            # 提交完整配置，保留目录同步等未由登录流程修改的字段
+            # 提交完整配置，保留联动等未由登录流程修改的字段
             new_config = self._full_config()
             self.update_config(new_config)
             self.init_plugin(new_config)
@@ -1800,38 +1770,6 @@ class Strm2Emby(_PluginBase):
         self._guangya_api = None
         self._persist_config()
         return schemas.Response(success=True, message="已退出登录")
-
-    # ── 目录同步：定时与手动触发 ──
-
-    def get_service(self) -> List[Dict[str, Any]]:
-        """注册目录同步定时服务（Cron）。"""
-        if not (self._enabled and self._sync_enabled and self._sync_cron):
-            return []
-        try:
-            trigger = CronTrigger.from_crontab(self._sync_cron)
-        except Exception as err:  # noqa: BLE001
-            logger.error(f"【Strm2Emby】目录同步 Cron 表达式无效：{self._sync_cron} - {err}")
-            return []
-        return [
-            {
-                # 使用类名作为服务 ID，避免虚拟分身之间服务 ID 冲突
-                "id": f"{self.__class__.__name__}.Sync",
-                "name": "Strm2Emby 目录同步",
-                "trigger": trigger,
-                "func": self.sync_directory,
-                "kwargs": {},
-            }
-        ]
-
-    def api_sync(self) -> schemas.Response[dict]:
-        """立即执行一次目录同步（手动触发/调试）。"""
-        if not self._sync_enabled:
-            return schemas.Response(success=False, message="目录同步未启用")
-        # 同步可能耗时较长，放到线程里执行，避免阻塞请求
-        threading.Thread(
-            target=self.sync_directory, name="Strm2EmbyManualSync", daemon=True
-        ).start()
-        return schemas.Response(success=True, message="同步任务已触发，请查看插件日志")
 
     # ── 云端目录浏览（目标目录选择器）──
 
@@ -1956,7 +1894,7 @@ class Strm2Emby(_PluginBase):
         大批量或大文件上传不再占用 HTTP 请求线程，避免撞上网关超时造成「假失败」；
         进度与逐文件结果通过 ``/progress`` 与 ``/history`` 查询。
         配置了「允许浏览的本地根目录」时，所有源路径必须位于其中；
-        复用目录同步的同名文件策略（sync_conflict），但恒不删除本地源文件。
+        复用同一套同名文件策略（sync_conflict），且恒不删除本地源文件。
         """
         if not self._guangya_api:
             return schemas.Response(success=False, message="插件未初始化，请先登录光鸭云盘")
@@ -2062,9 +2000,7 @@ class Strm2Emby(_PluginBase):
                         local_file,
                         src,
                         target_root,
-                        set(),
                         trigger=TRIGGER_MANUAL,
-                        delete_source=False,
                         on_progress=lambda percent, _row=row: self._update_progress_item(
                             _row, percent=percent
                         ),
@@ -2100,7 +2036,7 @@ class Strm2Emby(_PluginBase):
                 f"跳过 {stats['skipped']}，失败 {stats['failed']}"
             )
 
-    # ── 目录同步：内部实现 ──
+    # ── 联动上传：内部实现 ──
 
     def _unique_remote_name(self, remote_path: Path) -> str:
         """同名文件选择「保留两者」时，生成一个不冲突的新文件名。"""
@@ -2110,12 +2046,6 @@ class Strm2Emby(_PluginBase):
             if not self._guangya_api.get_item(remote_path.parent / candidate_name):
                 return candidate_name
         return f"{stem} ({int(time.time())}){suffix}"
-
-    def _sync_ext_set(self) -> set:
-        """解析「仅同步扩展名」配置为小写后缀集合。"""
-        if not self._sync_extensions:
-            return set()
-        return {e.strip().lower() for e in self._sync_extensions.split(",") if e.strip()}
 
     @staticmethod
     def _is_temp_name(name: str) -> bool:
@@ -2165,39 +2095,36 @@ class Strm2Emby(_PluginBase):
     def _prepare_remote(self) -> Optional[Path]:
         """同步前准备：清空缓存并确保远端目标根目录存在，返回目标根路径。"""
         if not self._guangya_api:
-            logger.error("【Strm2Emby】目录同步失败：插件未初始化或未登录")
+            logger.error("【Strm2Emby】准备云端目录失败：插件未初始化或未登录")
             return None
         # 每轮同步前清空缓存：云端可能被外部修改，避免把已删除文件误判为存在而跳过上传
         self._guangya_api.clear_cache()
         remote_root = Path(self._sync_remote_dir or "/")
         if not self._guangya_api.get_folder(remote_root):
-            logger.error("【Strm2Emby】目录同步失败：无法获取/创建光鸭目标目录")
+            logger.error("【Strm2Emby】准备云端目录失败：无法获取/创建光鸭目标目录")
             return None
         return remote_root
 
     def _sync_file(
         self,
         local: Path,
-        source: Path,
+        source: Optional[Path],
         remote_root: Path,
-        exts: set,
-        trigger: str = TRIGGER_SYNC,
-        delete_source: Optional[bool] = None,
+        trigger: str = TRIGGER_TRANSFER,
         on_progress: Optional[Any] = None,
         on_phase: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """
-        同步单个文件，返回 {status, name, local, remote, size, error, flash}。
+        上传单个文件，返回 {status, name, local, remote, size, error, flash}。
 
-        :param trigger: 触发来源（manual/sync/watch），用于进度与记录标记。
-        :param delete_source: 上传成功后是否删除本地文件；默认沿用插件配置，
-            手动上传等场景传 False 以免误删源文件。
+        :param source: 可选的本地基准目录；为空时直接按文件名上传（扁平）。
+        :param trigger: 触发来源（manual/transfer），用于进度与记录标记。
         :param on_progress: 可选的字节进度回调，接收 0-100 的整数百分比。
         :param on_phase: 可选的阶段回调，接收 hashing/uploading/confirming，
             避免大文件计算 MD5 期间进度条长时间无反馈。
+
+        联动上传与手动上传都不会删除本地源文件。
         """
-        if delete_source is None:
-            delete_source = self._sync_delete_source
         name = local.name
         size = local.stat().st_size if local.is_file() else 0
         base = {
@@ -2211,13 +2138,18 @@ class Strm2Emby(_PluginBase):
 
         if self._is_temp_name(name):
             return {**base, "status": "skipped"}
-        if exts and local.suffix.lower() not in exts:
-            return {**base, "status": "skipped"}
         if not local.is_file():
             return {**base, "status": "skipped"}
 
         try:
-            remote_path = remote_root / local.relative_to(source)
+            if source:
+                try:
+                    relative = local.relative_to(source)
+                except ValueError:
+                    relative = Path(local.name)
+            else:
+                relative = Path(local.name)
+            remote_path = remote_root / relative
             upload_name = name
             existing = self._guangya_api.get_item(remote_path)
             if existing:
@@ -2261,11 +2193,6 @@ class Strm2Emby(_PluginBase):
 
             flash = bool(meta.get("flash"))
             logger.info(f"【Strm2Emby】已上传{'（秒传）' if flash else ''}：{local} -> {remote_path}")
-            if delete_source:
-                try:
-                    local.unlink()
-                except OSError as err:
-                    logger.warning(f"【Strm2Emby】删除本地源文件失败：{local} - {err}")
             return {
                 **base,
                 "status": "uploaded",
@@ -2275,244 +2202,6 @@ class Strm2Emby(_PluginBase):
         except Exception as err:  # noqa: BLE001
             logger.error(f"【Strm2Emby】上传处理 {local} 出错：{err}")
             return {**base, "status": "failed", "error": str(err)}
-
-    def sync_directory(self, trigger: str = TRIGGER_SYNC):
-        """
-        全量同步：把本地源目录同步（上传）到光鸭云盘目标目录。
-
-        独立于 MoviePilot 整理链：按相对路径上传，已存在同名文件时按配置处理。
-        """
-        if not self._sync_enabled:
-            return
-
-        source = Path(self._sync_source_dir) if self._sync_source_dir else None
-        if not source or not source.is_dir():
-            logger.warning(f"【Strm2Emby】目录同步源目录无效：{self._sync_source_dir}")
-            return
-
-        stats = {"uploaded": 0, "skipped": 0, "failed": 0}
-        records: List[Dict[str, Any]] = []
-        # 全量与增量监控共用同一把锁，避免并发上传同名文件
-        with self._sync_lock:
-            remote_root = self._prepare_remote()
-            if remote_root is None:
-                return
-            exts = self._sync_ext_set()
-            files = [item for item in source.rglob("*") if item.is_file()]
-            self._begin_progress(trigger, len(files), "目录同步中")
-            for local in files:
-                size = local.stat().st_size if local.is_file() else 0
-                row = self._start_progress_item(local.name, local.as_posix(), size)
-                result = self._sync_file(
-                    local,
-                    source,
-                    remote_root,
-                    exts,
-                    trigger=trigger,
-                    on_progress=lambda percent, _row=row: self._update_progress_item(
-                        _row, percent=percent
-                    ),
-                    on_phase=lambda phase, _row=row: self._update_progress_item(
-                        _row, phase=phase
-                    ),
-                )
-                status = result.get("status", "failed")
-                stats[status] = stats.get(status, 0) + 1
-                self._update_progress_item(
-                    row,
-                    status=status,
-                    percent=100 if status == "uploaded" else row.get("percent", 0),
-                    remote=result.get("remote", ""),
-                    error=result.get("error", ""),
-                    flash=result.get("flash", False),
-                )
-                records.append(self._build_record(trigger, result))
-                self._update_progress(
-                    uploaded=stats["uploaded"],
-                    skipped=stats["skipped"],
-                    failed=stats["failed"],
-                )
-            self._finish_progress(stats, trigger)
-            logger.info(
-                f"【Strm2Emby】目录同步完成：上传 {stats['uploaded']}，"
-                f"跳过 {stats['skipped']}，失败 {stats['failed']}"
-            )
-        self._record_upload(records)
-        if stats["uploaded"] > 0:
-            self._schedule_litepan_notify()
-
-    # ── 目录监控 ──
-
-    def _restart_watch(self) -> None:
-        """根据配置重建或停止目录监控线程。"""
-        self._stop_watch()
-        if not (self._enabled and self._sync_enabled and self._sync_watch):
-            return
-        source = Path(self._sync_source_dir) if self._sync_source_dir else None
-        if not source or not source.is_dir():
-            logger.warning(f"【Strm2Emby】目录监控未启动，源目录无效：{self._sync_source_dir}")
-            return
-        self._watch_stop = threading.Event()
-        self._watch_thread = threading.Thread(
-            target=self._watch_loop, name="Strm2EmbyWatch", daemon=True
-        )
-        self._watch_thread.start()
-        logger.info(f"【Strm2Emby】目录监控已启动：{source}")
-
-    def _stop_watch(self) -> None:
-        """停止目录监控线程。"""
-        if self._watch_stop is not None:
-            self._watch_stop.set()
-        if self._watch_thread is not None and self._watch_thread.is_alive():
-            self._watch_thread.join(timeout=5)
-        self._watch_thread = None
-        self._watch_stop = None
-
-    def _watch_loop(self) -> None:
-        """
-        目录监控线程：监听本地源目录变化，去抖后增量上传。
-
-        兼容性处理：部分挂载（网络盘 / NAS 高级 ACL 目录）不支持 inotify，
-        ``watchfiles`` 会抛出 ``PermissionError``。此时自动切换为轮询模式重试
-        （``force_polling=True``），并在持续失败时按退避重启，避免监控永久停摆。
-        """
-        try:
-            from watchfiles import Change, watch
-        except Exception as err:  # noqa: BLE001
-            logger.error(f"【Strm2Emby】目录监控不可用（缺少 watchfiles）：{err}")
-            return
-
-        source = Path(self._sync_source_dir)
-        exts = self._sync_ext_set()
-        poll_delay_ms = (
-            max(int(self._sync_poll_interval or self._DEFAULT_WATCH_POLL_SECONDS), 1) * 1000
-        )
-        # 配置强制轮询时直接轮询；否则先尝试 inotify，失败后自动切换
-        force_polling: Optional[bool] = True if self._sync_watch_polling else None
-        logger.info(
-            "【Strm2Emby】目录监控线程开始，目录：%s（模式：%s）",
-            source,
-            "轮询" if force_polling else "自动",
-        )
-        backoff_index = 0
-        try:
-            while not (self._watch_stop is not None and self._watch_stop.is_set()):
-                try:
-                    self._run_watch(source, exts, watch, Change, force_polling, poll_delay_ms)
-                    break
-                except Exception as err:  # noqa: BLE001
-                    if self._watch_stop is not None and self._watch_stop.is_set():
-                        break
-                    if force_polling is not True:
-                        logger.warning(
-                            f"【Strm2Emby】目录监控 inotify 不可用（{err}），"
-                            f"自动切换轮询模式重试：{source}"
-                        )
-                        force_polling = True
-                        backoff_index = 0
-                        continue
-                    delay = self._WATCH_BACKOFF[
-                        min(backoff_index, len(self._WATCH_BACKOFF) - 1)
-                    ]
-                    backoff_index += 1
-                    logger.error(f"【Strm2Emby】目录监控异常，{delay} 秒后重试：{err}")
-                    if self._watch_stop is not None and self._watch_stop.wait(delay):
-                        break
-        finally:
-            logger.info("【Strm2Emby】目录监控线程结束")
-
-    def _run_watch(
-        self,
-        source: Path,
-        exts: set,
-        watch: Any,
-        change_cls: Any,
-        force_polling: Optional[bool],
-        poll_delay_ms: int,
-    ) -> None:
-        """
-        执行一次 watchfiles 监控循环；异常向上抛出，由 ``_watch_loop`` 决定回退/重启。
-
-        :param force_polling: True 走轮询；None/False 走 inotify。
-        :param poll_delay_ms: 轮询模式的目录扫描间隔（毫秒）。
-        """
-        # 仅在轮询模式下忽略权限拒绝的目录；inotify 模式不忽略，使权限问题能抛出，
-        # 从而触发轮询回退，而不是静默地什么都不监控。
-        ignore_permission_denied = force_polling is True
-        for changes in watch(
-            str(source),
-            stop_event=self._watch_stop,
-            recursive=True,
-            debounce=10000,
-            step=1000,
-            raise_interrupt=False,
-            force_polling=force_polling,
-            poll_delay_ms=poll_delay_ms,
-            ignore_permission_denied=ignore_permission_denied,
-        ):
-            if self._watch_stop is not None and self._watch_stop.is_set():
-                break
-            self._handle_watch_batch(changes, source, exts, change_cls)
-
-    def _handle_watch_batch(
-        self, changes: Any, source: Path, exts: set, change_cls: Any
-    ) -> None:
-        """处理一批 watchfiles 变更（与触发模式无关，供监控循环复用）。"""
-        targets = [
-            Path(path)
-            for change, path in changes
-            if change in (change_cls.added, change_cls.modified)
-        ]
-        targets = [p for p in targets if p.is_file()]
-        if not targets:
-            return
-        stats = {"uploaded": 0, "skipped": 0, "failed": 0}
-        records: List[Dict[str, Any]] = []
-        with self._sync_lock:
-            remote_root = self._prepare_remote()
-            if remote_root is None:
-                return
-            self._begin_progress(TRIGGER_WATCH, len(targets), "目录监控上传中")
-            for local in targets:
-                size = local.stat().st_size if local.is_file() else 0
-                row = self._start_progress_item(local.name, local.as_posix(), size)
-                result = self._sync_file(
-                    local,
-                    source,
-                    remote_root,
-                    exts,
-                    trigger=TRIGGER_WATCH,
-                    on_progress=lambda percent, _row=row: self._update_progress_item(
-                        _row, percent=percent
-                    ),
-                    on_phase=lambda phase, _row=row: self._update_progress_item(
-                        _row, phase=phase
-                    ),
-                )
-                status = result.get("status", "failed")
-                stats[status] = stats.get(status, 0) + 1
-                self._update_progress_item(
-                    row,
-                    status=status,
-                    percent=100 if status == "uploaded" else row.get("percent", 0),
-                    remote=result.get("remote", ""),
-                    error=result.get("error", ""),
-                    flash=result.get("flash", False),
-                )
-                records.append(self._build_record(TRIGGER_WATCH, result))
-                self._update_progress(
-                    uploaded=stats["uploaded"],
-                    skipped=stats["skipped"],
-                    failed=stats["failed"],
-                )
-            self._finish_progress(stats, TRIGGER_WATCH)
-            logger.info(
-                f"【Strm2Emby】目录监控触发：上传 {stats['uploaded']}，"
-                f"跳过 {stats['skipped']}，失败 {stats['failed']}"
-            )
-        self._record_upload(records)
-        if stats["uploaded"] > 0:
-            self._schedule_litepan_notify()
 
     # ── 记录 / 进度 / LitePan 查询 API ──
 

@@ -23,10 +23,10 @@ const _hoisted_8$3 = {
   key: 2,
   class: "rdp-empty"
 };
-const _hoisted_9$3 = ["onClick"];
-const _hoisted_10$3 = { class: "rdp-item__name" };
-const _hoisted_11$3 = { class: "rdp-current" };
-const _hoisted_12$3 = { class: "rdp-actions" };
+const _hoisted_9$2 = ["onClick"];
+const _hoisted_10$2 = { class: "rdp-item__name" };
+const _hoisted_11$2 = { class: "rdp-current" };
+const _hoisted_12$2 = { class: "rdp-actions" };
 
 const {computed: computed$3,ref: ref$4} = await importShared('vue');
 
@@ -228,21 +228,21 @@ return (_ctx, _cache) => {
                           size: "18",
                           color: "#f59e0b"
                         }),
-                        _createElementVNode$4("span", _hoisted_10$3, _toDisplayString$4(entry.name), 1),
+                        _createElementVNode$4("span", _hoisted_10$2, _toDisplayString$4(entry.name), 1),
                         _createVNode$4(_component_v_icon, {
                           icon: "mdi-chevron-right",
                           size: "16",
                           class: "rdp-item__arrow"
                         })
-                      ], 8, _hoisted_9$3))
+                      ], 8, _hoisted_9$2))
                     }), 128))
           ]),
-          _createElementVNode$4("div", _hoisted_11$3, [
+          _createElementVNode$4("div", _hoisted_11$2, [
             _cache[8] || (_cache[8] = _createTextVNode$4(" 将选择：", -1)),
             _createElementVNode$4("strong", null, _toDisplayString$4(currentPath.value || '/'), 1)
           ]),
           _cache[11] || (_cache[11] = _createElementVNode$4("div", { class: "rdp-hint" }, "也可以直接在输入框里手填新目录，上传时会自动创建。", -1)),
-          _createElementVNode$4("div", _hoisted_12$3, [
+          _createElementVNode$4("div", _hoisted_12$2, [
             _createVNode$4(_component_v_btn, {
               variant: "text",
               onClick: _cache[5] || (_cache[5] = $event => (dialog.value = false))
@@ -274,9 +274,9 @@ return (_ctx, _cache) => {
 };
 const RemoteDirPicker = /*#__PURE__*/_export_sfc(_sfc_main$4, [['__scopeId',"data-v-0b994415"]]);
 
-const DirectorySync_vue_vue_type_style_index_0_scoped_d02218aa_lang = '';
+const DirectorySync_vue_vue_type_style_index_0_scoped_be9acd3c_lang = '';
 
-const {resolveComponent:_resolveComponent$3,createVNode:_createVNode$3,createTextVNode:_createTextVNode$3,createElementVNode:_createElementVNode$3,toDisplayString:_toDisplayString$3,withCtx:_withCtx$3,openBlock:_openBlock$3,createElementBlock:_createElementBlock$3,createCommentVNode:_createCommentVNode$3,createBlock:_createBlock$3} = await importShared('vue');
+const {resolveComponent:_resolveComponent$3,createVNode:_createVNode$3,createTextVNode:_createTextVNode$3,createElementVNode:_createElementVNode$3,toDisplayString:_toDisplayString$3,withCtx:_withCtx$3,openBlock:_openBlock$3,createBlock:_createBlock$3,createCommentVNode:_createCommentVNode$3,createElementBlock:_createElementBlock$3} = await importShared('vue');
 
 
 const _hoisted_1$3 = { class: "ds-card" };
@@ -286,19 +286,7 @@ const _hoisted_4$3 = { class: "ds-grid" };
 const _hoisted_5$3 = { class: "ds-item" };
 const _hoisted_6$3 = { class: "ds-item" };
 const _hoisted_7$2 = { class: "ds-item" };
-const _hoisted_8$2 = { class: "ds-item" };
-const _hoisted_9$2 = { class: "ds-item" };
-const _hoisted_10$2 = { class: "ds-item" };
-const _hoisted_11$2 = { class: "ds-item" };
-const _hoisted_12$2 = { class: "ds-item" };
-const _hoisted_13$2 = { class: "ds-item" };
-const _hoisted_14$2 = { class: "ds-item" };
-const _hoisted_15$2 = { class: "ds-item" };
-const _hoisted_16$2 = { class: "ds-actions" };
-const _hoisted_17$1 = {
-  key: 0,
-  class: "ds-hint"
-};
+const _hoisted_8$2 = { class: "ds-actions" };
 
 const {reactive: reactive$1,ref: ref$3,watch: watch$1} = await importShared('vue');
 
@@ -309,8 +297,7 @@ const _sfc_main$3 = {
   api: { type: Object, default: () => ({}) },
   pluginId: { type: String, default: '' },
   sourcePluginId: { type: String, default: '' },
-  loggedIn: { type: Boolean, default: false },
-  // 父组件传入的完整插件配置（含 sync_* 字段）
+  // 父组件传入的完整插件配置
   config: { type: Object, default: () => ({}) },
 },
   emits: ['update'],
@@ -327,20 +314,11 @@ const conflictOptions = [
 ];
 
 const form = reactive$1({
-  sync_enabled: false,
-  sync_watch: false,
-  sync_watch_polling: false,
-  sync_poll_interval: 2,
-  sync_source_dir: '',
-  sync_remote_dir: '/',
-  sync_cron: '',
-  sync_conflict: 'skip',
-  sync_delete_source: false,
-  sync_extensions: '',
   sync_on_transfer: false,
+  sync_remote_dir: '/',
+  sync_conflict: 'skip',
 });
 const saving = ref$3(false);
-const syncing = ref$3(false);
 const feedback = ref$3({ type: '', text: '' });
 
 function currentPluginId() {
@@ -349,11 +327,8 @@ function currentPluginId() {
 
 async function request(path, options = {}) {
   const apiPath = `plugin/${currentPluginId()}${path}`;
-  if (options.method === 'POST' && props.api?.post) {
+  if (props.api?.post) {
     return props.api.post(apiPath, options.body ? JSON.parse(options.body) : {}, { feedback: 'silent', ...options })
-  }
-  if (options.method !== 'POST' && props.api?.get) {
-    return props.api.get(apiPath, { feedback: 'silent', ...options })
   }
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
   const response = await fetch(`/api/v1/${apiPath}`, { headers, ...options });
@@ -361,17 +336,9 @@ async function request(path, options = {}) {
 }
 
 function applyConfig(config = {}) {
-  form.sync_enabled = Boolean(config.sync_enabled);
-  form.sync_watch = Boolean(config.sync_watch);
-  form.sync_watch_polling = Boolean(config.sync_watch_polling);
-  form.sync_poll_interval = Number(config.sync_poll_interval || 2);
-  form.sync_source_dir = config.sync_source_dir || '';
-  form.sync_remote_dir = config.sync_remote_dir || '/';
-  form.sync_cron = config.sync_cron || '';
-  form.sync_conflict = config.sync_conflict || (config.sync_overwrite ? 'overwrite' : 'skip');
-  form.sync_delete_source = Boolean(config.sync_delete_source);
-  form.sync_extensions = config.sync_extensions || '';
   form.sync_on_transfer = Boolean(config.sync_on_transfer);
+  form.sync_remote_dir = config.sync_remote_dir || '/';
+  form.sync_conflict = config.sync_conflict || 'skip';
 }
 
 watch$1(() => props.config, (value) => applyConfig(value), { immediate: true, deep: true });
@@ -383,17 +350,9 @@ async function save() {
     const result = await request('/config', {
       method: 'POST',
       body: JSON.stringify({
-        sync_enabled: form.sync_enabled,
-        sync_watch: form.sync_watch,
-        sync_watch_polling: form.sync_watch_polling,
-        sync_poll_interval: Number(form.sync_poll_interval || 2),
-        sync_source_dir: form.sync_source_dir,
-        sync_remote_dir: form.sync_remote_dir,
-        sync_cron: form.sync_cron,
-        sync_conflict: form.sync_conflict,
-        sync_delete_source: form.sync_delete_source,
-        sync_extensions: form.sync_extensions,
         sync_on_transfer: form.sync_on_transfer,
+        sync_remote_dir: form.sync_remote_dir,
+        sync_conflict: form.sync_conflict,
       }),
     });
     if (!result.success) {
@@ -404,7 +363,7 @@ async function save() {
       applyConfig(result.data);
       emit('update', result.data);
     }
-    feedback.value = { type: 'success', text: result.message || '同步设置已保存' };
+    feedback.value = { type: 'success', text: result.message || '设置已保存' };
   } catch (error) {
     feedback.value = { type: 'error', text: `保存失败：${error.message || error}` };
   } finally {
@@ -412,28 +371,10 @@ async function save() {
   }
 }
 
-async function runNow() {
-  syncing.value = true;
-  feedback.value = { type: 'info', text: '正在同步，请稍候...' };
-  try {
-    const result = await request('/sync');
-    if (!result.success) {
-      feedback.value = { type: 'error', text: result.message || '同步失败' };
-    } else {
-      feedback.value = { type: 'success', text: result.message || '同步任务已执行，请查看插件日志' };
-    }
-  } catch (error) {
-    feedback.value = { type: 'error', text: `同步失败：${error.message || error}` };
-  } finally {
-    syncing.value = false;
-  }
-}
-
 return (_ctx, _cache) => {
   const _component_v_icon = _resolveComponent$3("v-icon");
   const _component_v_chip = _resolveComponent$3("v-chip");
   const _component_v_switch = _resolveComponent$3("v-switch");
-  const _component_v_text_field = _resolveComponent$3("v-text-field");
   const _component_v_select = _resolveComponent$3("v-select");
   const _component_v_btn = _resolveComponent$3("v-btn");
   const _component_v_alert = _resolveComponent$3("v-alert");
@@ -442,20 +383,20 @@ return (_ctx, _cache) => {
     _createElementVNode$3("div", _hoisted_2$3, [
       _createElementVNode$3("span", _hoisted_3$3, [
         _createVNode$3(_component_v_icon, {
-          icon: "mdi-folder-sync-outline",
+          icon: "mdi-folder-move-outline",
           size: "18",
           color: "#10b981",
           class: "mr-1"
         }),
-        _cache[11] || (_cache[11] = _createTextVNode$3(" 目录同步 ", -1))
+        _cache[3] || (_cache[3] = _createTextVNode$3(" 整理联动上传 ", -1))
       ]),
       _createVNode$3(_component_v_chip, {
-        color: form.sync_enabled ? 'success' : 'grey',
+        color: form.sync_on_transfer ? 'success' : 'grey',
         size: "x-small",
         variant: "tonal"
       }, {
         default: _withCtx$3(() => [
-          _createTextVNode$3(_toDisplayString$3(form.sync_enabled ? '已启用' : '未启用'), 1)
+          _createTextVNode$3(_toDisplayString$3(form.sync_on_transfer ? '已启用' : '未启用'), 1)
         ]),
         _: 1
       }, 8, ["color"])
@@ -463,102 +404,28 @@ return (_ctx, _cache) => {
     _createElementVNode$3("div", _hoisted_4$3, [
       _createElementVNode$3("div", _hoisted_5$3, [
         _createVNode$3(_component_v_switch, {
-          modelValue: form.sync_enabled,
-          "onUpdate:modelValue": _cache[0] || (_cache[0] = $event => ((form.sync_enabled) = $event)),
-          label: "启用目录同步",
+          modelValue: form.sync_on_transfer,
+          "onUpdate:modelValue": _cache[0] || (_cache[0] = $event => ((form.sync_on_transfer) = $event)),
+          label: "整理成功后自动上传",
           density: "compact",
           "hide-details": "",
           color: "primary"
         }, null, 8, ["modelValue"]),
-        _cache[12] || (_cache[12] = _createElementVNode$3("div", { class: "ds-hint" }, "把本地目录上传到光鸭云盘（独立于整理链）", -1))
+        _cache[4] || (_cache[4] = _createElementVNode$3("div", { class: "ds-hint" }, "订阅 MoviePilot「整理完成」事件，自动读取整理后的成品文件与媒体目录并上传；无需填写本地路径，不扫描目录、不参与整理过程。", -1))
       ]),
       _createElementVNode$3("div", _hoisted_6$3, [
-        _createVNode$3(_component_v_switch, {
-          modelValue: form.sync_watch,
-          "onUpdate:modelValue": _cache[1] || (_cache[1] = $event => ((form.sync_watch) = $event)),
-          label: "目录监控（实时）",
-          density: "compact",
-          "hide-details": "",
-          color: "primary"
-        }, null, 8, ["modelValue"]),
-        _cache[13] || (_cache[13] = _createElementVNode$3("div", { class: "ds-hint" }, "基于 watchfiles 实时上传，可不填 Cron；inotify 不可用时自动回退轮询", -1))
-      ]),
-      _createElementVNode$3("div", _hoisted_7$2, [
-        _createVNode$3(_component_v_switch, {
-          modelValue: form.sync_watch_polling,
-          "onUpdate:modelValue": _cache[2] || (_cache[2] = $event => ((form.sync_watch_polling) = $event)),
-          label: "强制轮询模式",
-          density: "compact",
-          "hide-details": "",
-          color: "primary",
-          disabled: !form.sync_watch
-        }, null, 8, ["modelValue", "disabled"]),
-        _cache[14] || (_cache[14] = _createElementVNode$3("div", { class: "ds-hint" }, "网络盘/带高级 ACL 的目录不支持 inotify 时勾选（否则会自动回退）", -1))
-      ]),
-      _createElementVNode$3("div", _hoisted_8$2, [
-        _createVNode$3(_component_v_text_field, {
-          modelValue: form.sync_poll_interval,
-          "onUpdate:modelValue": _cache[3] || (_cache[3] = $event => ((form.sync_poll_interval) = $event)),
-          modelModifiers: { number: true },
-          label: "轮询扫描间隔（秒）",
-          type: "number",
-          min: "1",
-          density: "compact",
-          variant: "outlined",
-          "hide-details": "",
-          class: "ds-input",
-          disabled: !form.sync_watch
-        }, null, 8, ["modelValue", "disabled"]),
-        _cache[15] || (_cache[15] = _createElementVNode$3("div", { class: "ds-hint" }, "仅轮询模式下生效，默认 2 秒", -1))
-      ]),
-      _createElementVNode$3("div", _hoisted_9$2, [
-        _createVNode$3(_component_v_switch, {
-          modelValue: form.sync_on_transfer,
-          "onUpdate:modelValue": _cache[4] || (_cache[4] = $event => ((form.sync_on_transfer) = $event)),
-          label: "整理联动（整理成功后上传）",
-          density: "compact",
-          "hide-details": "",
-          color: "primary"
-        }, null, 8, ["modelValue"]),
-        _cache[16] || (_cache[16] = _createElementVNode$3("div", { class: "ds-hint" }, "仅上传 MP「整理完成」后落入本地源目录的文件，最精准；建议与监控/Cron 并用", -1))
-      ]),
-      _createElementVNode$3("div", _hoisted_10$2, [
-        _createVNode$3(_component_v_text_field, {
-          modelValue: form.sync_source_dir,
-          "onUpdate:modelValue": _cache[5] || (_cache[5] = $event => ((form.sync_source_dir) = $event)),
-          label: "本地源目录",
-          placeholder: "/vol2/1000/Vol2/Media",
-          density: "compact",
-          variant: "outlined",
-          "hide-details": "",
-          class: "ds-input"
-        }, null, 8, ["modelValue"])
-      ]),
-      _createElementVNode$3("div", _hoisted_11$2, [
         _createVNode$3(RemoteDirPicker, {
           modelValue: form.sync_remote_dir,
-          "onUpdate:modelValue": _cache[6] || (_cache[6] = $event => ((form.sync_remote_dir) = $event)),
+          "onUpdate:modelValue": _cache[1] || (_cache[1] = $event => ((form.sync_remote_dir) = $event)),
           api: __props.api,
           "plugin-id": __props.pluginId,
           "source-plugin-id": __props.sourcePluginId
         }, null, 8, ["modelValue", "api", "plugin-id", "source-plugin-id"])
       ]),
-      _createElementVNode$3("div", _hoisted_12$2, [
-        _createVNode$3(_component_v_text_field, {
-          modelValue: form.sync_cron,
-          "onUpdate:modelValue": _cache[7] || (_cache[7] = $event => ((form.sync_cron) = $event)),
-          label: "同步周期（Cron）",
-          placeholder: "0 3 * * *",
-          density: "compact",
-          variant: "outlined",
-          "hide-details": "",
-          class: "ds-input"
-        }, null, 8, ["modelValue"])
-      ]),
-      _createElementVNode$3("div", _hoisted_13$2, [
+      _createElementVNode$3("div", _hoisted_7$2, [
         _createVNode$3(_component_v_select, {
           modelValue: form.sync_conflict,
-          "onUpdate:modelValue": _cache[8] || (_cache[8] = $event => ((form.sync_conflict) = $event)),
+          "onUpdate:modelValue": _cache[2] || (_cache[2] = $event => ((form.sync_conflict) = $event)),
           items: conflictOptions,
           "item-title": "title",
           "item-value": "value",
@@ -567,58 +434,22 @@ return (_ctx, _cache) => {
           variant: "outlined",
           "hide-details": "",
           class: "ds-input"
-        }, null, 8, ["modelValue"])
-      ]),
-      _createElementVNode$3("div", _hoisted_14$2, [
-        _createVNode$3(_component_v_text_field, {
-          modelValue: form.sync_extensions,
-          "onUpdate:modelValue": _cache[9] || (_cache[9] = $event => ((form.sync_extensions) = $event)),
-          label: "仅同步扩展名（可选）",
-          placeholder: ".mkv,.mp4,.srt",
-          density: "compact",
-          variant: "outlined",
-          "hide-details": "",
-          class: "ds-input"
-        }, null, 8, ["modelValue"])
-      ]),
-      _createElementVNode$3("div", _hoisted_15$2, [
-        _createVNode$3(_component_v_switch, {
-          modelValue: form.sync_delete_source,
-          "onUpdate:modelValue": _cache[10] || (_cache[10] = $event => ((form.sync_delete_source) = $event)),
-          label: "上传成功后删除本地",
-          density: "compact",
-          "hide-details": "",
-          color: "error"
         }, null, 8, ["modelValue"]),
-        _cache[17] || (_cache[17] = _createElementVNode$3("div", { class: "ds-hint" }, "谨慎开启，删除不可恢复", -1))
+        _cache[5] || (_cache[5] = _createElementVNode$3("div", { class: "ds-hint" }, "云端已有同名文件时的处理方式，默认跳过", -1))
       ])
     ]),
-    _createElementVNode$3("div", _hoisted_16$2, [
+    _createElementVNode$3("div", _hoisted_8$2, [
       _createVNode$3(_component_v_btn, {
         color: "primary",
         loading: saving.value,
         onClick: save
       }, {
-        default: _withCtx$3(() => [...(_cache[18] || (_cache[18] = [
-          _createTextVNode$3("保存同步设置", -1)
+        default: _withCtx$3(() => [...(_cache[6] || (_cache[6] = [
+          _createTextVNode$3("保存设置", -1)
         ]))]),
         _: 1
       }, 8, ["loading"]),
-      _createVNode$3(_component_v_btn, {
-        variant: "tonal",
-        "prepend-icon": "mdi-sync",
-        loading: syncing.value,
-        disabled: !__props.loggedIn,
-        onClick: runNow
-      }, {
-        default: _withCtx$3(() => [...(_cache[19] || (_cache[19] = [
-          _createTextVNode$3("立即同步", -1)
-        ]))]),
-        _: 1
-      }, 8, ["loading", "disabled"]),
-      (!__props.loggedIn)
-        ? (_openBlock$3(), _createElementBlock$3("span", _hoisted_17$1, "未登录光鸭云盘，无法同步"))
-        : _createCommentVNode$3("", true)
+      _cache[7] || (_cache[7] = _createElementVNode$3("span", { class: "ds-hint" }, "上传记录与逐文件进度见下方「上传记录」", -1))
     ]),
     (feedback.value.text)
       ? (_openBlock$3(), _createBlock$3(_component_v_alert, {
@@ -638,9 +469,9 @@ return (_ctx, _cache) => {
 }
 
 };
-const DirectorySync = /*#__PURE__*/_export_sfc(_sfc_main$3, [['__scopeId',"data-v-d02218aa"]]);
+const DirectorySync = /*#__PURE__*/_export_sfc(_sfc_main$3, [['__scopeId',"data-v-be9acd3c"]]);
 
-const ManualUpload_vue_vue_type_style_index_0_scoped_30e45de6_lang = '';
+const ManualUpload_vue_vue_type_style_index_0_scoped_1024210b_lang = '';
 
 const {resolveComponent:_resolveComponent$2,createVNode:_createVNode$2,createTextVNode:_createTextVNode$2,createElementVNode:_createElementVNode$2,toDisplayString:_toDisplayString$2,withCtx:_withCtx$2,withKeys:_withKeys,openBlock:_openBlock$2,createElementBlock:_createElementBlock$2,createCommentVNode:_createCommentVNode$2,renderList:_renderList$1,Fragment:_Fragment$1,withModifiers:_withModifiers,createBlock:_createBlock$2,normalizeClass:_normalizeClass} = await importShared('vue');
 
@@ -1014,7 +845,7 @@ return (_ctx, _cache) => {
               _: 1
             }, 8, ["type"]))
           : _createCommentVNode$2("", true),
-        _cache[7] || (_cache[7] = _createElementVNode$2("div", { class: "mu-hint" }, "同名文件按「目录同步」的同名策略处理；手动上传不会删除本地源文件。", -1))
+        _cache[7] || (_cache[7] = _createElementVNode$2("div", { class: "mu-hint" }, "同名文件按上方设置的同名策略处理；手动上传不会删除本地源文件。", -1))
       ])
     ])
   ]))
@@ -1022,9 +853,9 @@ return (_ctx, _cache) => {
 }
 
 };
-const ManualUpload = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-30e45de6"]]);
+const ManualUpload = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-1024210b"]]);
 
-const UploadHistory_vue_vue_type_style_index_0_scoped_309d440e_lang = '';
+const UploadHistory_vue_vue_type_style_index_0_scoped_cb7fae24_lang = '';
 
 const {resolveComponent:_resolveComponent$1,createVNode:_createVNode$1,createTextVNode:_createTextVNode$1,createElementVNode:_createElementVNode$1,toDisplayString:_toDisplayString$1,withCtx:_withCtx$1,renderList:_renderList,Fragment:_Fragment,openBlock:_openBlock$1,createElementBlock:_createElementBlock$1,createCommentVNode:_createCommentVNode$1,createBlock:_createBlock$1} = await importShared('vue');
 
@@ -1109,8 +940,6 @@ let wasActive = false;
 const filterOptions = [
   { title: '全部', value: 'all' },
   { title: '手动上传', value: 'manual' },
-  { title: '目录同步', value: 'sync' },
-  { title: '目录监控', value: 'watch' },
   { title: '整理联动', value: 'transfer' },
 ];
 
@@ -1495,9 +1324,9 @@ return (_ctx, _cache) => {
 }
 
 };
-const UploadHistory = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-309d440e"]]);
+const UploadHistory = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-cb7fae24"]]);
 
-const AppPage_vue_vue_type_style_index_0_scoped_505e18e1_lang = '';
+const AppPage_vue_vue_type_style_index_0_scoped_67cc6de5_lang = '';
 
 const {resolveComponent:_resolveComponent,createVNode:_createVNode,createElementVNode:_createElementVNode,toDisplayString:_toDisplayString,createTextVNode:_createTextVNode,withCtx:_withCtx,openBlock:_openBlock,createBlock:_createBlock,createCommentVNode:_createCommentVNode,createElementBlock:_createElementBlock} = await importShared('vue');
 
@@ -1536,7 +1365,6 @@ const status = reactive({
   logged_in: false,
   total_space: 0,
   used_space: 0,
-  sync_source_dir: '',
   sync_remote_dir: '/',
 });
 
@@ -1556,7 +1384,6 @@ async function loadStatus() {
     status.logged_in = Boolean(data?.data?.logged_in);
     status.total_space = Number(data?.data?.total_space || 0);
     status.used_space = Number(data?.data?.used_space || 0);
-    status.sync_source_dir = data?.data?.sync_source_dir || '';
     status.sync_remote_dir = data?.data?.sync_remote_dir || '/';
   } catch (error) {
     console.error('获取光鸭云盘状态失败', error);
@@ -1570,7 +1397,6 @@ function onConfigUpdate(data) {
     return
   }
   fullConfig.value = data;
-  status.sync_source_dir = data.sync_source_dir || '';
   status.sync_remote_dir = data.sync_remote_dir || '/';
 }
 
@@ -1675,10 +1501,9 @@ return (_ctx, _cache) => {
       api: __props.api,
       "plugin-id": __props.pluginId,
       "source-plugin-id": __props.sourcePluginId,
-      "logged-in": status.logged_in,
       config: fullConfig.value,
       onUpdate: onConfigUpdate
-    }, null, 8, ["api", "plugin-id", "source-plugin-id", "logged-in", "config"]),
+    }, null, 8, ["api", "plugin-id", "source-plugin-id", "config"]),
     (status.logged_in)
       ? (_openBlock(), _createBlock(ManualUpload, {
           key: 1,
@@ -1686,9 +1511,8 @@ return (_ctx, _cache) => {
           "plugin-id": __props.pluginId,
           "source-plugin-id": __props.sourcePluginId,
           "logged-in": status.logged_in,
-          "default-source-dir": status.sync_source_dir,
           "default-remote-dir": status.sync_remote_dir
-        }, null, 8, ["api", "plugin-id", "source-plugin-id", "logged-in", "default-source-dir", "default-remote-dir"]))
+        }, null, 8, ["api", "plugin-id", "source-plugin-id", "logged-in", "default-remote-dir"]))
       : (_openBlock(), _createElementBlock("div", _hoisted_6, [
           _createVNode(_component_v_icon, {
             icon: "mdi-cloud-off-outline",
@@ -1707,6 +1531,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const AppPage = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-505e18e1"]]);
+const AppPage = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-67cc6de5"]]);
 
 export { AppPage as default };
