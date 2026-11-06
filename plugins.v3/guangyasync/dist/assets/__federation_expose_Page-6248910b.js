@@ -2868,7 +2868,7 @@ browser.toString = renderCanvas.bind(null, function (data, _, opts) {
   return SvgRenderer.render(data, opts)
 });
 
-const Page_vue_vue_type_style_index_0_scoped_b5244b96_lang = '';
+const Page_vue_vue_type_style_index_0_scoped_30f01c69_lang = '';
 
 const {resolveComponent:_resolveComponent,createVNode:_createVNode,createElementVNode:_createElementVNode,withCtx:_withCtx,createTextVNode:_createTextVNode,toDisplayString:_toDisplayString,normalizeClass:_normalizeClass,normalizeStyle:_normalizeStyle,Fragment:_Fragment,openBlock:_openBlock,createElementBlock:_createElementBlock,createCommentVNode:_createCommentVNode,createBlock:_createBlock} = await importShared('vue');
 
@@ -2970,7 +2970,7 @@ const _hoisted_79 = { class: "gy-empty-state__steps" };
 
 const {computed,onBeforeUnmount,onMounted,reactive,ref,watch} = await importShared('vue');
 
-const PRIVACY_MODE_STORAGE_KEY = 'strm2emby-page-privacy-mode';
+const PRIVACY_MODE_STORAGE_KEY = 'guangyasync-page-privacy-mode';
 
 
 const _sfc_main = {
@@ -2988,7 +2988,7 @@ const _sfc_main = {
 const props = __props;
 const emit = __emit;
 
-const currentPluginId = computed(() => props.pluginId || props.sourcePluginId || 'Strm2Emby');
+const currentPluginId = computed(() => props.pluginId || props.sourcePluginId || 'guangyasync');
 
 const status = reactive({
   enabled: false,
@@ -3494,7 +3494,7 @@ return (_ctx, _cache) => {
           })
         ]),
         _cache[4] || (_cache[4] = _createElementVNode("div", null, [
-          _createElementVNode("div", { class: "gy-topbar__title" }, "Strm2Emby"),
+          _createElementVNode("div", { class: "gy-topbar__title" }, "光鸭同步"),
           _createElementVNode("div", { class: "gy-topbar__sub" }, "管理光鸭云盘文件同步与访问")
         ], -1))
       ]),
@@ -3930,6 +3930,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const Page = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-b5244b96"]]);
+const Page = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-30f01c69"]]);
 
 export { Page as default };

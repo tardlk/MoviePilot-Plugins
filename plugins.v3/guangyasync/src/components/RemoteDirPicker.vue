@@ -120,7 +120,7 @@ const items = ref([])
 const loading = ref(false)
 const error = ref('')
 
-const currentPluginId = computed(() => props.pluginId || props.sourcePluginId || 'Strm2Emby')
+const currentPluginId = computed(() => props.pluginId || props.sourcePluginId || 'guangyasync')
 
 async function request(path) {
   const apiPath = `plugin/${currentPluginId.value}${path}`

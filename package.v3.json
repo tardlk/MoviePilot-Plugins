@@ -1,22 +1,23 @@
 {
-  "Strm2Emby": {
-    "name": "Strm2Emby",
+  "guangyasync": {
+    "name": "光鸭同步",
     "description": "将光鸭云盘接入 MoviePilot 存储，在整理成功后联动上传成品文件，并提供手动上传、上传记录与 LitePan 联动。",
     "labels": "存储,工具",
-    "version": "1.2.0",
-    "icon": "https://raw.githubusercontent.com/tardlk/MoviePilot-Plugins/main/icons/Strm2Emby.png",
+    "version": "1.3.0",
+    "icon": "https://raw.githubusercontent.com/tardlk/MoviePilot-Plugins/main/icons/guangyasync.png",
     "author": "tardlk",
     "level": 1,
     "release": true,
     "system_version": ">=3.0.0",
     "history": {
+      "v1.3.0": "破坏性变更：插件显示名称定为「光鸭同步」，技术 ID 全量改为 guangyasync——类名、目录 plugins.v3/guangyasync、配置前缀 guangyasync_、API 路径 /api/v1/plugin/guangyasync/*、联邦模块名、存储类型标识（FileItem.storage）、图标与发布包名同步变更。不兼容早期插件 ID 的安装：需卸载旧实例后重新安装并重新扫码登录，配置与上传记录不会迁移。",
       "v1.2.0": "破坏性变更：目录同步收敛为「整理成功后联动上传」，移除实时目录监控（含 inotify 轮询回退）、Cron 定时、全量同步与 /sync 接口；整理联动不再依赖 sync_enabled 总开关，也不再需要「本地源目录」配置，成品路径与媒体目录改由 TransferComplete 事件的 target_item / file_list_new / target_diritem 自动获取。手动上传、上传记录/进度、LitePan 联动保持不变。",
       "v1.1.2": "新增「光鸭目标目录」选择器：目录同步与手动上传均可浏览云盘目录逐级选择，也可继续手填新目录（上传时自动创建）。新增只读接口 /remote/list。",
       "v1.1.1": "移除 pyproject.toml 依赖声明（apscheduler/oss2/watchfiles 均由 MoviePilot 宿主内置），避免宿主对插件做多余依赖安装导致的状态卡在「依赖未就绪」。",
       "v1.1.0": "新增「整理联动」：订阅 MP 整理完成事件，仅把整理成功后落入本地源目录的文件上传到光鸭（与监控/Cron 并用，最精准）。",
       "v1.0.4": "修复文件列举失败：部分接口（如 file/get_file_list）成功响应不含 code，严格成功码校验将其误判为失败；现在 code 缺失时也接受 msg=success。",
       "v1.0.3": "目录监控健壮性增强：inotify 不可用（网络盘/NAS 高级 ACL）时自动回退轮询模式并按退避重启；新增「强制轮询模式」与「轮询扫描间隔」配置。",
-      "v1.0.2": "清理仓库元数据并独立品牌化：存储注册名改为 Strm2Emby，补齐 README、LICENSE、市场索引与自动发布工作流。",
+      "v1.0.2": "清理仓库元数据并独立品牌化：存储注册名改为当时的插件 ID，补齐 README、LICENSE、市场索引与自动发布工作流。",
       "v1.0.1": "初始版本：光鸭云盘存储接入、扫码登录、目录同步（Cron/实时监控）、手动上传、上传记录与进度、LitePan 联动。"
     }
   }

@@ -117,7 +117,7 @@ const props = defineProps({
   defaultRemoteDir: { type: String, default: '/' },
 })
 
-const currentPluginId = computed(() => props.pluginId || props.sourcePluginId || 'Strm2Emby')
+const currentPluginId = computed(() => props.pluginId || props.sourcePluginId || 'guangyasync')
 const localPath = ref('')
 const fsItems = ref([])
 const fsParent = ref('')

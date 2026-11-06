@@ -7,7 +7,7 @@
           <v-icon icon="mdi-cloud-outline" size="24" />
         </div>
         <div>
-          <div class="gy-topbar__title">Strm2Emby</div>
+          <div class="gy-topbar__title">光鸭同步</div>
           <div class="gy-topbar__sub">管理光鸭云盘文件同步与访问</div>
         </div>
       </div>
@@ -299,7 +299,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import QRCode from 'qrcode'
 
-const PRIVACY_MODE_STORAGE_KEY = 'strm2emby-page-privacy-mode'
+const PRIVACY_MODE_STORAGE_KEY = 'guangyasync-page-privacy-mode'
 
 const props = defineProps({
   initialConfig: { type: Object, default: () => ({}) },
@@ -310,7 +310,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['close', 'switch'])
 
-const currentPluginId = computed(() => props.pluginId || props.sourcePluginId || 'Strm2Emby')
+const currentPluginId = computed(() => props.pluginId || props.sourcePluginId || 'guangyasync')
 
 const status = reactive({
   enabled: false,

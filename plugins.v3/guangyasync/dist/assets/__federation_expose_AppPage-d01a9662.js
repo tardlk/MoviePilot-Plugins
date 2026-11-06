@@ -1,7 +1,7 @@
 import { importShared } from './__federation_fn_import-054b33c3.js';
 import { _ as _export_sfc } from './_plugin-vue_export-helper-c4c0bc37.js';
 
-const RemoteDirPicker_vue_vue_type_style_index_0_scoped_0b994415_lang = '';
+const RemoteDirPicker_vue_vue_type_style_index_0_scoped_9cadfe07_lang = '';
 
 const {resolveComponent:_resolveComponent$4,createVNode:_createVNode$4,withCtx:_withCtx$4,createElementVNode:_createElementVNode$4,withKeys:_withKeys$1,openBlock:_openBlock$4,createElementBlock:_createElementBlock$4,createCommentVNode:_createCommentVNode$4,toDisplayString:_toDisplayString$4,renderList:_renderList$2,Fragment:_Fragment$2,createTextVNode:_createTextVNode$4} = await importShared('vue');
 
@@ -63,7 +63,7 @@ const items = ref$4([]);
 const loading = ref$4(false);
 const error = ref$4('');
 
-const currentPluginId = computed$3(() => props.pluginId || props.sourcePluginId || 'Strm2Emby');
+const currentPluginId = computed$3(() => props.pluginId || props.sourcePluginId || 'guangyasync');
 
 async function request(path) {
   const apiPath = `plugin/${currentPluginId.value}${path}`;
@@ -272,9 +272,9 @@ return (_ctx, _cache) => {
 }
 
 };
-const RemoteDirPicker = /*#__PURE__*/_export_sfc(_sfc_main$4, [['__scopeId',"data-v-0b994415"]]);
+const RemoteDirPicker = /*#__PURE__*/_export_sfc(_sfc_main$4, [['__scopeId',"data-v-9cadfe07"]]);
 
-const DirectorySync_vue_vue_type_style_index_0_scoped_be9acd3c_lang = '';
+const DirectorySync_vue_vue_type_style_index_0_scoped_4c2d62b2_lang = '';
 
 const {resolveComponent:_resolveComponent$3,createVNode:_createVNode$3,createTextVNode:_createTextVNode$3,createElementVNode:_createElementVNode$3,toDisplayString:_toDisplayString$3,withCtx:_withCtx$3,openBlock:_openBlock$3,createBlock:_createBlock$3,createCommentVNode:_createCommentVNode$3,createElementBlock:_createElementBlock$3} = await importShared('vue');
 
@@ -322,7 +322,7 @@ const saving = ref$3(false);
 const feedback = ref$3({ type: '', text: '' });
 
 function currentPluginId() {
-  return props.pluginId || props.sourcePluginId || 'Strm2Emby'
+  return props.pluginId || props.sourcePluginId || 'guangyasync'
 }
 
 async function request(path, options = {}) {
@@ -469,9 +469,9 @@ return (_ctx, _cache) => {
 }
 
 };
-const DirectorySync = /*#__PURE__*/_export_sfc(_sfc_main$3, [['__scopeId',"data-v-be9acd3c"]]);
+const DirectorySync = /*#__PURE__*/_export_sfc(_sfc_main$3, [['__scopeId',"data-v-4c2d62b2"]]);
 
-const ManualUpload_vue_vue_type_style_index_0_scoped_1024210b_lang = '';
+const ManualUpload_vue_vue_type_style_index_0_scoped_11c3a556_lang = '';
 
 const {resolveComponent:_resolveComponent$2,createVNode:_createVNode$2,createTextVNode:_createTextVNode$2,createElementVNode:_createElementVNode$2,toDisplayString:_toDisplayString$2,withCtx:_withCtx$2,withKeys:_withKeys,openBlock:_openBlock$2,createElementBlock:_createElementBlock$2,createCommentVNode:_createCommentVNode$2,renderList:_renderList$1,Fragment:_Fragment$1,withModifiers:_withModifiers,createBlock:_createBlock$2,normalizeClass:_normalizeClass} = await importShared('vue');
 
@@ -525,7 +525,7 @@ const _sfc_main$2 = {
 
 const props = __props;
 
-const currentPluginId = computed$2(() => props.pluginId || props.sourcePluginId || 'Strm2Emby');
+const currentPluginId = computed$2(() => props.pluginId || props.sourcePluginId || 'guangyasync');
 const localPath = ref$2('');
 const fsItems = ref$2([]);
 const fsParent = ref$2('');
@@ -853,9 +853,9 @@ return (_ctx, _cache) => {
 }
 
 };
-const ManualUpload = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-1024210b"]]);
+const ManualUpload = /*#__PURE__*/_export_sfc(_sfc_main$2, [['__scopeId',"data-v-11c3a556"]]);
 
-const UploadHistory_vue_vue_type_style_index_0_scoped_cb7fae24_lang = '';
+const UploadHistory_vue_vue_type_style_index_0_scoped_4ceb7da0_lang = '';
 
 const {resolveComponent:_resolveComponent$1,createVNode:_createVNode$1,createTextVNode:_createTextVNode$1,createElementVNode:_createElementVNode$1,toDisplayString:_toDisplayString$1,withCtx:_withCtx$1,renderList:_renderList,Fragment:_Fragment,openBlock:_openBlock$1,createElementBlock:_createElementBlock$1,createCommentVNode:_createCommentVNode$1,createBlock:_createBlock$1} = await importShared('vue');
 
@@ -994,7 +994,7 @@ function emptyProgress() {
 }
 
 function currentPluginId() {
-  return props.pluginId || props.sourcePluginId || 'Strm2Emby'
+  return props.pluginId || props.sourcePluginId || 'guangyasync'
 }
 
 async function request(path, options = {}) {
@@ -1324,9 +1324,9 @@ return (_ctx, _cache) => {
 }
 
 };
-const UploadHistory = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-cb7fae24"]]);
+const UploadHistory = /*#__PURE__*/_export_sfc(_sfc_main$1, [['__scopeId',"data-v-4ceb7da0"]]);
 
-const AppPage_vue_vue_type_style_index_0_scoped_67cc6de5_lang = '';
+const AppPage_vue_vue_type_style_index_0_scoped_a145d8e6_lang = '';
 
 const {resolveComponent:_resolveComponent,createVNode:_createVNode,createElementVNode:_createElementVNode,toDisplayString:_toDisplayString,createTextVNode:_createTextVNode,withCtx:_withCtx,openBlock:_openBlock,createBlock:_createBlock,createCommentVNode:_createCommentVNode,createElementBlock:_createElementBlock} = await importShared('vue');
 
@@ -1368,7 +1368,7 @@ const status = reactive({
   sync_remote_dir: '/',
 });
 
-const currentPluginId = computed(() => props.pluginId || props.sourcePluginId || 'Strm2Emby');
+const currentPluginId = computed(() => props.pluginId || props.sourcePluginId || 'guangyasync');
 
 async function loadStatus() {
   loading.value = true;
@@ -1430,7 +1430,7 @@ return (_ctx, _cache) => {
           })
         ]),
         _cache[0] || (_cache[0] = _createElementVNode("div", { class: "ap-header__meta" }, [
-          _createElementVNode("div", { class: "ap-header__title" }, "Strm2Emby"),
+          _createElementVNode("div", { class: "ap-header__title" }, "光鸭同步"),
           _createElementVNode("div", { class: "ap-header__sub" }, "浏览 MoviePilot 主机文件并上传到光鸭云盘")
         ], -1))
       ]),
@@ -1531,6 +1531,6 @@ return (_ctx, _cache) => {
 }
 
 };
-const AppPage = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-67cc6de5"]]);
+const AppPage = /*#__PURE__*/_export_sfc(_sfc_main, [['__scopeId',"data-v-a145d8e6"]]);
 
 export { AppPage as default };

@@ -1,4 +1,4 @@
-"""Strm2Emby 插件 API 的数据模型与请求体模型。
+"""光鸭同步（guangyasync）插件 API 的数据模型与请求体模型。
 
 MoviePilot V3 要求 `get_api()` 注册的普通 JSON endpoint 使用
 `app.schemas.response.Response` 作为统一响应 envelope，并用 Pydantic 模型声明

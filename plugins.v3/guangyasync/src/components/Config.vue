@@ -351,7 +351,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['close', 'switch'])
 
-const currentPluginId = computed(() => props.pluginId || props.sourcePluginId || 'Strm2Emby')
+const currentPluginId = computed(() => props.pluginId || props.sourcePluginId || 'guangyasync')
 
 const config = reactive({
   enabled: false,

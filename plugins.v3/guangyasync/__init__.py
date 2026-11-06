@@ -1,5 +1,5 @@
 """
-Strm2Emby —— 让 MoviePilot 把「光鸭云盘」当作存储使用，并在整理成功后
+光鸭同步（guangyasync）—— 让 MoviePilot 把「光鸭云盘」当作存储使用，并在整理成功后
 联动上传成品文件，另提供手动上传、上传记录与 LitePan 联动。
 
 文件结构：
@@ -93,24 +93,28 @@ _TEMP_SUFFIXES = (
 )
 
 
-class Strm2Emby(_PluginBase):
+class guangyasync(_PluginBase):
     """
-    Strm2Emby 插件主类。
+    光鸭同步（插件 ID: guangyasync）主类。
     """
 
     # ── 插件元信息 ──
-    plugin_name = "Strm2Emby"
+    # 显示名称：插件列表 / 侧栏入口 / 全页标题 / 市场里用户看到的名字。
+    # 插件 ID、类名、目录名、配置前缀、API 路径、联邦模块名、存储类型标识
+    # 与 FileItem.storage 统一为 guangyasync（v1.3.0 起定稿，不兼容早期 ID）。
+    _display_name = "光鸭同步"
+    plugin_name = _display_name
     plugin_desc = "使 MoviePilot 存储支持光鸭云盘，整理成功后联动上传，并提供手动上传与 LitePan 联动。"
-    plugin_icon = "https://raw.githubusercontent.com/tardlk/MoviePilot-Plugins/main/icons/Strm2Emby.png"
-    plugin_version = "1.2.0"
+    plugin_icon = "https://raw.githubusercontent.com/tardlk/MoviePilot-Plugins/main/icons/guangyasync.png"
+    plugin_version = "1.3.0"
     plugin_author = "tardlk"
     author_url = "https://github.com/tardlk"
-    plugin_config_prefix = "strm2emby_"
+    plugin_config_prefix = "guangyasync_"
     plugin_order = 99
     auth_level = 1
 
     # 存储展示名（用于 StorageHelper 注册与 FileItem.storage）
-    _disk_name = "Strm2Emby"
+    _disk_name = "guangyasync"
     # 快照时是否按目录修改时间做增量跳过（对齐 MoviePilot V3 StorageBase）
     snapshot_check_folder_modtime: bool = True
 
@@ -205,7 +209,7 @@ class Strm2Emby(_PluginBase):
         self._load_config(config)
 
         logger.info(
-            "【Strm2Emby】初始化插件: enabled=%s, device_id=%s, has_access_token=%s",
+            "【光鸭同步】初始化插件: enabled=%s, device_id=%s, has_access_token=%s",
             self._enabled,
             self._device_id,
             bool(self._access_token),
@@ -294,11 +298,11 @@ class Strm2Emby(_PluginBase):
 
         def on_token_refresh(access_token: str, refresh_token: str):
             """token 刷新后自动持久化，避免重启后失效。"""
-            logger.info("【Strm2Emby】收到 Token 刷新回调，准备保存配置")
+            logger.info("【光鸭同步】收到 Token 刷新回调，准备保存配置")
             self._access_token = access_token
             self._refresh_token = refresh_token
             self.update_config(self._full_config())
-            logger.info("【Strm2Emby】Token 已自动保存")
+            logger.info("【光鸭同步】Token 已自动保存")
 
         try:
             self._client = GuangYaClient(
@@ -324,7 +328,7 @@ class Strm2Emby(_PluginBase):
                 resume_store_dir=resume_store_dir,
             )
         except Exception as err:  # noqa: BLE001
-            logger.error(f"【Strm2Emby】客户端创建失败: {err}")
+            logger.error(f"【光鸭同步】客户端创建失败: {err}")
             self._client = None
             self._guangya_api = None
 
@@ -334,7 +338,7 @@ class Strm2Emby(_PluginBase):
             history = self.get_data("upload_history")
             self._upload_history = history if isinstance(history, list) else []
         except Exception as err:  # noqa: BLE001
-            logger.debug(f"【Strm2Emby】读取上传记录失败: {err}")
+            logger.debug(f"【光鸭同步】读取上传记录失败: {err}")
             self._upload_history = []
 
     def get_state(self) -> bool:
@@ -364,7 +368,7 @@ class Strm2Emby(_PluginBase):
         return [
             {
                 "nav_key": "main",
-                "title": "Strm2Emby",
+                "title": self._display_name,
                 "icon": "mdi-duck",
                 "section": "organize",
                 "permission": "manage",
@@ -531,7 +535,7 @@ class Strm2Emby(_PluginBase):
     def _clear_auth_state(self, reason: str = "") -> None:
         """清理认证状态并持久化。"""
         if reason:
-            logger.warning(f"【Strm2Emby】清理登录状态: {reason}")
+            logger.warning(f"【光鸭同步】清理登录状态: {reason}")
         self._access_token = ""
         self._refresh_token = ""
         self._device_code = ""
@@ -616,7 +620,7 @@ class Strm2Emby(_PluginBase):
                 return stats
             if self._is_auth_invalid(user_info):
                 logger.warning(
-                    f"【Strm2Emby】用户信息接口认证异常，但未确认 refresh_token 失效，暂不清空登录态: {user_info}"
+                    f"【光鸭同步】用户信息接口认证异常，但未确认 refresh_token 失效，暂不清空登录态: {user_info}"
                 )
                 return stats
 
@@ -633,7 +637,7 @@ class Strm2Emby(_PluginBase):
             if user_name is None and user_id is not None:
                 user_name = user_id
             if user_name is None and user_id is None:
-                logger.warning(f"【Strm2Emby】用户信息无有效身份字段，视为未登录: {user_info}")
+                logger.warning(f"【光鸭同步】用户信息无有效身份字段，视为未登录: {user_info}")
                 return stats
 
             stats["user_name"] = "" if user_name is None else str(user_name)
@@ -651,7 +655,7 @@ class Strm2Emby(_PluginBase):
                 return stats
             if self._is_auth_invalid(assets_info):
                 logger.warning(
-                    f"【Strm2Emby】空间信息接口认证异常，但未确认 refresh_token 失效，暂不清空登录态: {assets_info}"
+                    f"【光鸭同步】空间信息接口认证异常，但未确认 refresh_token 失效，暂不清空登录态: {assets_info}"
                 )
                 return stats
 
@@ -678,7 +682,7 @@ class Strm2Emby(_PluginBase):
                 self._pick_first(assets_data, "vipExpireTime", "vip_expire_time", "expireTime")
             )
         except Exception as err:  # noqa: BLE001
-            logger.error(f"【Strm2Emby】获取用户信息失败: {err}")
+            logger.error(f"【光鸭同步】获取用户信息失败: {err}")
             return self._empty_account_stats()
         return stats
 
@@ -929,7 +933,7 @@ class Strm2Emby(_PluginBase):
         try:
             self.save_data("upload_history", self._upload_history)
         except Exception as err:  # noqa: BLE001
-            logger.error(f"【Strm2Emby】保存上传记录失败: {err}")
+            logger.error(f"【光鸭同步】保存上传记录失败: {err}")
 
     # ── API 注册 ──
 
@@ -1072,7 +1076,7 @@ class Strm2Emby(_PluginBase):
                 data=PluginConfigData(**self._config_dict()),
             )
         except Exception as err:  # noqa: BLE001
-            logger.error(f"【Strm2Emby】保存配置失败: {err}")
+            logger.error(f"【光鸭同步】保存配置失败: {err}")
             return schemas.Response(success=False, message=f"保存配置失败: {err}")
 
     # ── 存储契约：模块方法 ──
@@ -1206,7 +1210,7 @@ class Strm2Emby(_PluginBase):
                 return
             self._schedule_transfer_upload(jobs)
         except Exception as err:  # noqa: BLE001
-            logger.error(f"【Strm2Emby】整理联动处理失败: {err}")
+            logger.error(f"【光鸭同步】整理联动处理失败: {err}")
 
     @staticmethod
     def _event_get(obj: Any, key: str, default: Any = None) -> Any:
@@ -1323,7 +1327,7 @@ class Strm2Emby(_PluginBase):
         threading.Thread(
             target=self._run_transfer_upload,
             args=(jobs,),
-            name="Strm2EmbyTransferSync",
+            name="guangyasync-transfer-sync",
             daemon=True,
         ).start()
 
@@ -1332,7 +1336,7 @@ class Strm2Emby(_PluginBase):
     ) -> None:
         """后台批量上传整理后的文件（复用单文件上传逻辑）。"""
         if not self._guangya_api:
-            logger.error("【Strm2Emby】整理联动上传失败：插件未初始化或未登录")
+            logger.error("【光鸭同步】整理联动上传失败：插件未初始化或未登录")
             return
         stats = {"uploaded": 0, "skipped": 0, "failed": 0}
         records: List[Dict[str, Any]] = []
@@ -1377,11 +1381,11 @@ class Strm2Emby(_PluginBase):
                     )
                 self._finish_progress(stats, TRIGGER_TRANSFER)
                 logger.info(
-                    f"【Strm2Emby】整理联动完成：上传 {stats['uploaded']}，"
+                    f"【光鸭同步】整理联动完成：上传 {stats['uploaded']}，"
                     f"跳过 {stats['skipped']}，失败 {stats['failed']}"
                 )
         except Exception as err:  # noqa: BLE001
-            logger.error(f"【Strm2Emby】整理联动后台任务异常：{err}")
+            logger.error(f"【光鸭同步】整理联动后台任务异常：{err}")
         finally:
             self._record_upload(records)
             if stats["uploaded"] > 0:
@@ -1402,7 +1406,7 @@ class Strm2Emby(_PluginBase):
         if not self._own_storage(fileitem.storage):
             return None
         if not self._guangya_api:
-            logger.error("【Strm2Emby】list_files 失败：插件未初始化或未登录")
+            logger.error("【光鸭同步】list_files 失败：插件未初始化或未登录")
             return []
 
         result: List[schemas.FileItem] = []
@@ -1431,7 +1435,7 @@ class Strm2Emby(_PluginBase):
         if not self._own_storage(fileitem.storage):
             return None
         if not self._guangya_api:
-            logger.error("【Strm2Emby】any_files 失败：插件未初始化或未登录")
+            logger.error("【光鸭同步】any_files 失败：插件未初始化或未登录")
             return False
 
         def _any(_item: FileItem) -> bool:
@@ -1461,7 +1465,7 @@ class Strm2Emby(_PluginBase):
         if not self._own_storage(fileitem.storage):
             return None
         if not self._guangya_api:
-            logger.error("【Strm2Emby】create_folder 失败：插件未初始化或未登录")
+            logger.error("【光鸭同步】create_folder 失败：插件未初始化或未登录")
             return None
         return self._guangya_api.create_folder(fileitem=fileitem, name=name)
 
@@ -1472,7 +1476,7 @@ class Strm2Emby(_PluginBase):
         if not self._own_storage(fileitem.storage):
             return None
         if not self._guangya_api:
-            logger.error("【Strm2Emby】download_file 失败：插件未初始化或未登录")
+            logger.error("【光鸭同步】download_file 失败：插件未初始化或未登录")
             return None
         return self._guangya_api.download(fileitem, path)
 
@@ -1483,7 +1487,7 @@ class Strm2Emby(_PluginBase):
         if not self._own_storage(fileitem.storage):
             return None
         if not self._guangya_api:
-            logger.error("【Strm2Emby】upload_file 失败：插件未初始化或未登录")
+            logger.error("【光鸭同步】upload_file 失败：插件未初始化或未登录")
             return None
         return self._guangya_api.upload(fileitem, path, new_name)
 
@@ -1492,7 +1496,7 @@ class Strm2Emby(_PluginBase):
         if not self._own_storage(fileitem.storage):
             return None
         if not self._guangya_api:
-            logger.error("【Strm2Emby】delete_file 失败：插件未初始化或未登录")
+            logger.error("【光鸭同步】delete_file 失败：插件未初始化或未登录")
             return False
         return self._guangya_api.delete(fileitem)
 
@@ -1501,7 +1505,7 @@ class Strm2Emby(_PluginBase):
         if not self._own_storage(fileitem.storage):
             return None
         if not self._guangya_api:
-            logger.error("【Strm2Emby】rename_file 失败：插件未初始化或未登录")
+            logger.error("【光鸭同步】rename_file 失败：插件未初始化或未登录")
             return False
         return self._guangya_api.rename(fileitem, name)
 
@@ -1522,7 +1526,7 @@ class Strm2Emby(_PluginBase):
         if not self._own_storage(storage):
             return None
         if not self._guangya_api:
-            logger.error("【Strm2Emby】get_file_item 失败：插件未初始化或未登录")
+            logger.error("【光鸭同步】get_file_item 失败：插件未初始化或未登录")
             return None
         return self._guangya_api.get_item(path)
 
@@ -1531,7 +1535,7 @@ class Strm2Emby(_PluginBase):
         if not self._own_storage(fileitem.storage):
             return None
         if not self._guangya_api:
-            logger.error("【Strm2Emby】get_parent_item 失败：插件未初始化或未登录")
+            logger.error("【光鸭同步】get_parent_item 失败：插件未初始化或未登录")
             return None
         return self._guangya_api.get_parent(fileitem)
 
@@ -1545,7 +1549,7 @@ class Strm2Emby(_PluginBase):
         if not self._own_storage(storage):
             return None
         if not self._guangya_api:
-            logger.error("【Strm2Emby】get_folder 失败：插件未初始化或未登录")
+            logger.error("【光鸭同步】get_folder 失败：插件未初始化或未登录")
             return None
         return self._guangya_api.get_folder(path)
 
@@ -1559,7 +1563,7 @@ class Strm2Emby(_PluginBase):
         if not self._own_storage(storage):
             return None
         if not self._guangya_api:
-            logger.error("【Strm2Emby】storage_usage 失败：插件未初始化或未登录")
+            logger.error("【光鸭同步】storage_usage 失败：插件未初始化或未登录")
             return schemas.StorageUsage(total=0, available=0)
         return self._guangya_api.usage()
 
@@ -1597,7 +1601,7 @@ class Strm2Emby(_PluginBase):
         if not self._own_storage(storage):
             return None
         if not self._guangya_api:
-            logger.error("【Strm2Emby】snapshot_storage 失败：插件未初始化或未登录")
+            logger.error("【光鸭同步】snapshot_storage 失败：插件未初始化或未登录")
             return {}
 
         root_path = PurePosixPath(path.as_posix())
@@ -1659,7 +1663,7 @@ class Strm2Emby(_PluginBase):
                         "type": _fileitem.type,
                     }
             except Exception as err:  # noqa: BLE001
-                logger.debug(f"【Strm2Emby】快照遍历 {_fileitem.path} 出错: {err}")
+                logger.debug(f"【光鸭同步】快照遍历 {_fileitem.path} 出错: {err}")
 
         root_item = self._guangya_api.get_item(path)
         if not root_item:
@@ -1712,7 +1716,7 @@ class Strm2Emby(_PluginBase):
                 ),
             )
         except Exception as err:  # noqa: BLE001
-            logger.error(f"【Strm2Emby】获取二维码失败: {err}")
+            logger.error(f"【光鸭同步】获取二维码失败: {err}")
             return schemas.Response(success=False, message=f"获取二维码失败: {err}")
 
     def poll_login(self) -> schemas.Response[LoginPollData]:
@@ -1745,14 +1749,14 @@ class Strm2Emby(_PluginBase):
             self.update_config(new_config)
             self.init_plugin(new_config)
             self._device_code = ""
-            logger.info("【Strm2Emby】扫码登录成功")
+            logger.info("【光鸭同步】扫码登录成功")
             return schemas.Response(
                 success=True,
                 message="登录成功",
                 data=LoginPollData(waiting=False),
             )
         except Exception as err:  # noqa: BLE001
-            logger.error(f"【Strm2Emby】轮询登录失败: {err}")
+            logger.error(f"【光鸭同步】轮询登录失败: {err}")
             return schemas.Response(success=False, message=f"轮询失败: {err}")
 
     def logout(self) -> schemas.Response[dict]:
@@ -1799,7 +1803,7 @@ class Strm2Emby(_PluginBase):
                 )
             children = self._guangya_api.list(folder) or []
         except Exception as err:  # noqa: BLE001
-            logger.error(f"【Strm2Emby】浏览云端目录失败 {normalized}: {err}")
+            logger.error(f"【光鸭同步】浏览云端目录失败 {normalized}: {err}")
             return schemas.Response(success=False, message=f"读取云端目录失败：{err}")
 
         items: List[RemoteDirEntry] = []
@@ -1879,7 +1883,7 @@ class Strm2Emby(_PluginBase):
                 ),
             )
         except Exception as err:  # noqa: BLE001
-            logger.error(f"【Strm2Emby】浏览本地目录失败: {err}")
+            logger.error(f"【光鸭同步】浏览本地目录失败: {err}")
             return schemas.Response(success=False, message=f"浏览失败: {err}")
 
     def manual_upload(
@@ -1918,7 +1922,7 @@ class Strm2Emby(_PluginBase):
 
         if not valid:
             message = f"没有可上传的路径：{', '.join(missing)}"
-            logger.warning(f"【Strm2Emby】手动上传未启动：{message}")
+            logger.warning(f"【光鸭同步】手动上传未启动：{message}")
             return schemas.Response(
                 success=False,
                 message=message,
@@ -1928,13 +1932,13 @@ class Strm2Emby(_PluginBase):
         threading.Thread(
             target=self._run_manual_upload,
             args=(valid, remote_dir),
-            name="Strm2EmbyManualUpload",
+            name="guangyasync-manual-upload",
             daemon=True,
         ).start()
         message = f"已提交 {len(valid)} 个路径的后台上传任务，进度请查看「上传记录」"
         if missing:
             message += f"；已忽略无效路径：{', '.join(missing)}"
-        logger.info(f"【Strm2Emby】手动上传任务已提交：{len(valid)} 个路径 → {remote_dir}")
+        logger.info(f"【光鸭同步】手动上传任务已提交：{len(valid)} 个路径 → {remote_dir}")
         return schemas.Response(
             success=True,
             message=message,
@@ -1949,7 +1953,7 @@ class Strm2Emby(_PluginBase):
         :param remote_dir: 光鸭云盘目标目录
         """
         if not self._guangya_api:
-            logger.error("【Strm2Emby】手动上传失败：插件未初始化或未登录")
+            logger.error("【光鸭同步】手动上传失败：插件未初始化或未登录")
             return
 
         remote_root = Path(remote_dir)
@@ -1961,7 +1965,7 @@ class Strm2Emby(_PluginBase):
                 # 清空缓存，避免云端被外部删除后误判为「已存在」而跳过上传
                 self._guangya_api.clear_cache()
                 if not self._guangya_api.get_folder(remote_root):
-                    logger.error(f"【Strm2Emby】手动上传失败：无法创建光鸭目标目录 {remote_dir}")
+                    logger.error(f"【光鸭同步】手动上传失败：无法创建光鸭目标目录 {remote_dir}")
                     return
 
                 # 展开为文件级任务，先算总数用于进度
@@ -1970,7 +1974,7 @@ class Strm2Emby(_PluginBase):
                     if local.is_dir():
                         target_root = remote_root / local.name
                         if not self._guangya_api.get_folder(target_root):
-                            logger.error(f"【Strm2Emby】手动上传：无法创建光鸭目录 {target_root}")
+                            logger.error(f"【光鸭同步】手动上传：无法创建光鸭目录 {target_root}")
                             stats["failed"] += 1
                             records.append(
                                 {
@@ -2026,13 +2030,13 @@ class Strm2Emby(_PluginBase):
                     )
                 self._finish_progress(stats, TRIGGER_MANUAL)
         except Exception as err:  # noqa: BLE001
-            logger.error(f"【Strm2Emby】手动上传后台任务异常：{err}")
+            logger.error(f"【光鸭同步】手动上传后台任务异常：{err}")
         finally:
             self._record_upload(records)
             if stats["uploaded"] > 0:
                 self._schedule_litepan_notify()
             logger.info(
-                f"【Strm2Emby】手动上传完成：成功 {stats['uploaded']}，"
+                f"【光鸭同步】手动上传完成：成功 {stats['uploaded']}，"
                 f"跳过 {stats['skipped']}，失败 {stats['failed']}"
             )
 
@@ -2095,13 +2099,13 @@ class Strm2Emby(_PluginBase):
     def _prepare_remote(self) -> Optional[Path]:
         """同步前准备：清空缓存并确保远端目标根目录存在，返回目标根路径。"""
         if not self._guangya_api:
-            logger.error("【Strm2Emby】准备云端目录失败：插件未初始化或未登录")
+            logger.error("【光鸭同步】准备云端目录失败：插件未初始化或未登录")
             return None
         # 每轮同步前清空缓存：云端可能被外部修改，避免把已删除文件误判为存在而跳过上传
         self._guangya_api.clear_cache()
         remote_root = Path(self._sync_remote_dir or "/")
         if not self._guangya_api.get_folder(remote_root):
-            logger.error("【Strm2Emby】准备云端目录失败：无法获取/创建光鸭目标目录")
+            logger.error("【光鸭同步】准备云端目录失败：无法获取/创建光鸭目标目录")
             return None
         return remote_root
 
@@ -2157,12 +2161,12 @@ class Strm2Emby(_PluginBase):
                     return {**base, "status": "skipped", "remote": remote_path.as_posix()}
                 if self._sync_conflict == CONFLICT_OVERWRITE:
                     if existing.type != "file":
-                        logger.error(f"【Strm2Emby】上传：目标已存在同名目录，跳过：{remote_path}")
+                        logger.error(f"【光鸭同步】上传：目标已存在同名目录，跳过：{remote_path}")
                         return {**base, "status": "failed", "remote": remote_path.as_posix()}
                     if existing.size and int(existing.size) == size:
                         return {**base, "status": "skipped", "remote": remote_path.as_posix()}
                     if not self._guangya_api.delete(existing):
-                        logger.error(f"【Strm2Emby】上传：删除远端同名文件失败：{remote_path}")
+                        logger.error(f"【光鸭同步】上传：删除远端同名文件失败：{remote_path}")
                         return {**base, "status": "failed", "remote": remote_path.as_posix()}
                 elif self._sync_conflict == CONFLICT_RENAME:
                     upload_name = self._unique_remote_name(remote_path)
@@ -2170,7 +2174,7 @@ class Strm2Emby(_PluginBase):
 
             parent = self._guangya_api.get_folder(remote_path.parent)
             if not parent:
-                logger.error(f"【Strm2Emby】上传目标目录创建失败：{remote_path.parent}")
+                logger.error(f"【光鸭同步】上传目标目录创建失败：{remote_path.parent}")
                 return {**base, "status": "failed", "remote": remote_path.as_posix()}
 
             meta: Dict[str, Any] = {}
@@ -2183,7 +2187,7 @@ class Strm2Emby(_PluginBase):
                 result_meta=meta,
             )
             if not item:
-                logger.error(f"【Strm2Emby】上传失败（详见 upload 诊断日志）：{local}")
+                logger.error(f"【光鸭同步】上传失败（详见 upload 诊断日志）：{local}")
                 return {
                     **base,
                     "status": "failed",
@@ -2192,7 +2196,7 @@ class Strm2Emby(_PluginBase):
                 }
 
             flash = bool(meta.get("flash"))
-            logger.info(f"【Strm2Emby】已上传{'（秒传）' if flash else ''}：{local} -> {remote_path}")
+            logger.info(f"【光鸭同步】已上传{'（秒传）' if flash else ''}：{local} -> {remote_path}")
             return {
                 **base,
                 "status": "uploaded",
@@ -2200,7 +2204,7 @@ class Strm2Emby(_PluginBase):
                 "flash": flash,
             }
         except Exception as err:  # noqa: BLE001
-            logger.error(f"【Strm2Emby】上传处理 {local} 出错：{err}")
+            logger.error(f"【光鸭同步】上传处理 {local} 出错：{err}")
             return {**base, "status": "failed", "error": str(err)}
 
     # ── 记录 / 进度 / LitePan 查询 API ──
@@ -2224,7 +2228,7 @@ class Strm2Emby(_PluginBase):
         try:
             self.save_data("upload_history", [])
         except Exception as err:  # noqa: BLE001
-            logger.error(f"【Strm2Emby】清空上传记录失败: {err}")
+            logger.error(f"【光鸭同步】清空上传记录失败: {err}")
         return schemas.Response(success=True, message="上传记录已清空")
 
     def get_upload_progress(self) -> schemas.Response[UploadProgressData]:
@@ -2339,11 +2343,11 @@ class Strm2Emby(_PluginBase):
             else:
                 result["ok"] = response.status_code == 200
             logger.info(
-                f"【Strm2Emby】LitePan 联动已通知: event={event} path={path} "
+                f"【光鸭同步】LitePan 联动已通知: event={event} path={path} "
                 f"matched={result['matched']} triggered={result['triggered']}"
             )
         except Exception as err:  # noqa: BLE001
             result["message"] = str(err)
-            logger.warning(f"【Strm2Emby】LitePan 联动通知失败: {err}")
+            logger.warning(f"【光鸭同步】LitePan 联动通知失败: {err}")
         self._last_litepan_notify = result
         return result

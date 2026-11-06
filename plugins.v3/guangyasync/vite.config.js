@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [
     vue(),
     federation({
-      name: 'Strm2Emby',
+      name: 'guangyasync',
       filename: 'remoteEntry.js',
       exposes: {
         './Page': './src/components/Page.vue',

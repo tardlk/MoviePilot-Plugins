@@ -1,10 +1,10 @@
 <div align="center">
 
-# Strm2Emby · MoviePilot 插件
+# 光鸭同步 · MoviePilot 插件
 
 **把「光鸭云盘」接入 MoviePilot 存储，在整理完成后联动上传成品文件，并提供手动上传、上传记录与 LitePan 联动。**
 
-[![version](https://img.shields.io/badge/version-1.2.0-blue?style=flat-square)](https://github.com/tardlk/MoviePilot-Plugins/releases)
+[![version](https://img.shields.io/badge/version-1.3.0-blue?style=flat-square)](https://github.com/tardlk/MoviePilot-Plugins/releases)
 [![MoviePilot](https://img.shields.io/badge/MoviePilot-V3-6C63FF?style=flat-square)](https://github.com/jxxghp/MoviePilot)
 [![license](https://img.shields.io/badge/license-GPL--3.0-success?style=flat-square)](LICENSE)
 [![author](https://img.shields.io/badge/author-tardlk-0ea5e9?style=flat-square)](https://github.com/tardlk)
@@ -15,24 +15,24 @@
 
 ## 简介
 
-`Strm2Emby` 让 MoviePilot（下称 MP）把 **光鸭云盘** 当作一种存储来使用，可用于媒体整理 / 刮削的**源**或**目标**；在 MP 整理成功后**联动上传成品文件**，另提供**手动上传**、**上传记录 / 逐文件进度**，并可在上传完成后**联动 LitePan** 自动生成 STRM 并刷新 Emby / Jellyfin。
+`光鸭同步`（插件 ID `guangyasync`）让 MoviePilot（下称 MP）把 **光鸭云盘** 当作一种存储来使用，可用于媒体整理 / 刮削的**源**或**目标**；在 MP 整理成功后**联动上传成品文件**，另提供**手动上传**、**上传记录 / 逐文件进度**，并可在上传完成后**联动 LitePan** 自动生成 STRM 并刷新 Emby / Jellyfin。
 
 | 项目 | 说明 |
 | :-- | :-- |
-| 插件 ID | `Strm2Emby` |
-| 显示名称 | Strm2Emby |
-| 版本 | v1.2.0 |
+| 插件 ID | `guangyasync` |
+| 显示名称 | 光鸭同步 |
+| 版本 | v1.3.0 |
 | 标签 | 存储、工具 |
 | 作者 | [tardlk](https://github.com/tardlk) |
 | 兼容 | MoviePilot **V3**（`system_version: ">=3.0.0"`，不兼容 V2） |
-| 目录 | [`plugins.v3/strm2emby`](plugins.v3/strm2emby) |
+| 目录 | [`plugins.v3/guangyasync`](plugins.v3/guangyasync) |
 | 许可 | [GPL-3.0](LICENSE) |
 
 ---
 
 ## 功能特性
 
-- **存储接入** — 在 MoviePilot 的「存储」中使用 `Strm2Emby`，支持列表、上传、下载、删除、重命名、移动、复制、空间用量与快照。
+- **存储接入** — 在 MoviePilot 的「存储」中使用「光鸭同步」，支持列表、上传、下载、删除、重命名、移动、复制、空间用量与快照。
 - **扫码登录** — 光鸭云盘 App 扫码授权，令牌自动持久化与刷新；任何 API 都不返回明文令牌。
 - **整理联动上传** — 订阅 MoviePilot「整理完成」事件，直接读取整理结果与媒体目录信息上传成品文件；无需填写本地路径，不扫描目录、不参与整理。
 - **手动上传** — 在「整理」全页浏览 MoviePilot 主机目录，选择文件或整个文件夹上传，仅超级管理员可用。
@@ -52,17 +52,17 @@
    ```
    https://github.com/tardlk/MoviePilot-Plugins
    ```
-2. 搜索 **「Strm2Emby」**（作者 `tardlk`）并安装。
-3. 启用插件，打开 **左侧「整理」分组 → Strm2Emby**（或插件页）扫码登录光鸭云盘。
+2. 搜索 **「光鸭同步」**（作者 `tardlk`）并安装。
+3. 启用插件，打开 **左侧「整理」分组 → 光鸭同步**（或插件页）扫码登录光鸭云盘。
 
 **方式二：Release 压缩包**
 
 前往 [Releases](https://github.com/tardlk/MoviePilot-Plugins/releases) 下载最新的
-`strm2emby_vX.Y.Z.zip`，在 MoviePilot 插件管理页上传安装。
+`guangyasync_vX.Y.Z.zip`，在 MoviePilot 插件管理页上传安装。
 
 ### 使用
 
-- 插件启用后，左侧导航 **「整理」** 分组会出现 **「Strm2Emby」** 全页入口，其中包含：
+- 插件启用后，左侧导航 **「整理」** 分组会出现 **「光鸭同步」** 全页入口，其中包含：
   **整理联动上传**、**手动上传**、**上传记录**。
 - 插件自身的状态页只保留扫码登录 / 状态信息；**配置**在插件配置页（含 LitePan 联动）。
 
@@ -76,7 +76,7 @@
 
 云端路径为「目标目录 / 媒体目录名 / 文件相对路径」，例如整理产出 `/media/电影/阿凡达 (2009)/阿凡达.mkv` 会落到 `/Media/阿凡达 (2009)/阿凡达.mkv`。媒体目录信息由 MoviePilot 提供；缺失时回退到目标文件所在目录，再缺失则直接按文件名上传。
 
-在左侧「整理 → Strm2Emby」全页的「整理联动上传」卡片中设置：
+在左侧「整理 → 光鸭同步」全页的「整理联动上传」卡片中设置：
 
 | 字段 | 说明 |
 | :-- | :-- |
@@ -90,7 +90,7 @@ v1.2.0 起已移除实时目录监控、Cron 定时、全量同步、`GET /sync`
 
 ### 手动上传
 
-在左侧「整理 → Strm2Emby」全页的「手动上传」卡片中：
+在左侧「整理 → 光鸭同步」全页的「手动上传」卡片中：
 
 1. 在「服务器目录」输入 MoviePilot 主机上的绝对路径并浏览，点击文件加入选择、点击目录进入；
 2. 目录右侧的「+」可把整个文件夹加入选择（逐个文件、保留相对结构上传）；
@@ -136,7 +136,7 @@ LitePan 自动化规则：cache_clear → strm →（可选 strm_scrape）→ em
 
 ---
 
-## 配置项（`strm2emby_*`）
+## 配置项（`guangyasync_*`）
 
 | 分类 | 字段 | 默认 | 说明 |
 | :-- | :-- | :-- | :-- |
@@ -163,18 +163,18 @@ LitePan 自动化规则：cache_clear → strm →（可选 strm_scrape）→ em
 
 | 方法 | 路径 | 说明 |
 | :-- | :-- | :-- |
-| GET / POST | `/api/v1/plugin/Strm2Emby/config` | 读取 / 保存配置 |
-| GET | `/api/v1/plugin/Strm2Emby/login/qrcode` | 获取扫码二维码 |
-| GET | `/api/v1/plugin/Strm2Emby/login/poll` | 轮询扫码登录 |
-| POST | `/api/v1/plugin/Strm2Emby/login/logout` | 退出登录 |
-| GET | `/api/v1/plugin/Strm2Emby/fs/list?path=` | 浏览 MoviePilot 主机目录（仅超级管理员） |
-| GET | `/api/v1/plugin/Strm2Emby/remote/list?path=` | 浏览光鸭云盘目录（只读，仅返回子目录，供目标目录选择器使用） |
-| POST | `/api/v1/plugin/Strm2Emby/upload` | 手动上传 `{paths, remote_dir}`（仅超级管理员） |
-| GET | `/api/v1/plugin/Strm2Emby/progress` | 当前上传 / 同步进度 |
-| GET | `/api/v1/plugin/Strm2Emby/history?limit=` | 上传 / 同步记录 |
-| POST | `/api/v1/plugin/Strm2Emby/history/clear` | 清空上传 / 同步记录 |
-| GET | `/api/v1/plugin/Strm2Emby/litepan/status` | 最近一次 LitePan 联动结果 |
-| POST | `/api/v1/plugin/Strm2Emby/litepan/test` | 立即发送一次 LitePan 测试事件 |
+| GET / POST | `/api/v1/plugin/guangyasync/config` | 读取 / 保存配置 |
+| GET | `/api/v1/plugin/guangyasync/login/qrcode` | 获取扫码二维码 |
+| GET | `/api/v1/plugin/guangyasync/login/poll` | 轮询扫码登录 |
+| POST | `/api/v1/plugin/guangyasync/login/logout` | 退出登录 |
+| GET | `/api/v1/plugin/guangyasync/fs/list?path=` | 浏览 MoviePilot 主机目录（仅超级管理员） |
+| GET | `/api/v1/plugin/guangyasync/remote/list?path=` | 浏览光鸭云盘目录（只读，仅返回子目录，供目标目录选择器使用） |
+| POST | `/api/v1/plugin/guangyasync/upload` | 手动上传 `{paths, remote_dir}`（仅超级管理员） |
+| GET | `/api/v1/plugin/guangyasync/progress` | 当前上传 / 同步进度 |
+| GET | `/api/v1/plugin/guangyasync/history?limit=` | 上传 / 同步记录 |
+| POST | `/api/v1/plugin/guangyasync/history/clear` | 清空上传 / 同步记录 |
+| GET | `/api/v1/plugin/guangyasync/litepan/status` | 最近一次 LitePan 联动结果 |
+| POST | `/api/v1/plugin/guangyasync/litepan/test` | 立即发送一次 LitePan 测试事件 |
 
 ---
 
@@ -182,15 +182,15 @@ LitePan 自动化规则：cache_clear → strm →（可选 strm_scrape）→ em
 
 ```text
 MoviePilot-Plugins/
-├── plugins.v3/strm2emby/             # 插件本体：后端 + Vue 前端源码
-│   ├── __init__.py                   # 主类 Strm2Emby（配置/登录/存储模块方法/整理联动/上传/进度）
+├── plugins.v3/guangyasync/             # 插件本体：后端 + Vue 前端源码
+│   ├── __init__.py                   # 主类 guangyasync（配置/登录/存储模块方法/整理联动/上传/进度）
 │   ├── guangya_api.py                # 存储层 GuangYaApi（分页列举/严格查询/任务型增删改/上传/usage/snapshot）
 │   ├── guangya_client.py             # 传输层 GuangYaClient（统一请求/错误码/刷新/限流/登录/上传票据/OSS）
 │   ├── models.py                     # 各端点的 Pydantic 请求/数据模型
 │   ├── dist/assets/                  # Vue 联邦构建产物（宿主实际加载 remoteEntry.js）
 │   ├── src/                          # 前端源码 components/{Config,Page,AppPage,ManualUpload,DirectorySync,UploadHistory,RemoteDirPicker}.vue
 │   └── vite.config.js / package.json / build-zip.js
-├── icons/Strm2Emby.png               # 插件图标
+├── icons/guangyasync.png               # 插件图标
 ├── package.v3.json                   # V3 插件市场索引
 ├── .github/workflows/release.yml     # 自动发布工作流
 ├── LICENSE                           # GPL-3.0
@@ -202,10 +202,10 @@ MoviePilot-Plugins/
 
 ## 开发与构建
 
-前端是 **Vue 联邦组件**，宿主实际加载的是构建产物 `plugins.v3/strm2emby/dist/assets/`，**需要本地构建**：
+前端是 **Vue 联邦组件**，宿主实际加载的是构建产物 `plugins.v3/guangyasync/dist/assets/`，**需要本地构建**：
 
 ```bash
-cd plugins.v3/strm2emby
+cd plugins.v3/guangyasync
 npm install
 npm run build:web      # 生成 dist/
 npm run build          # build:web + build:zip，额外生成可上传的 zip
@@ -221,7 +221,7 @@ npm run build          # build:web + build:zip，额外生成可上传的 zip
 <details>
 <summary>装好后找不到入口？</summary>
 
-入口在左侧 **「整理」分组 → Strm2Emby**。若刚安装 / 更新，请**硬刷新**页面（`Ctrl+Shift+R`）或重新登录。
+入口在左侧 **「整理」分组 → 光鸭同步**。若刚安装 / 更新，请**硬刷新**页面（`Ctrl+Shift+R`）或重新登录。
 
 </details>
 
@@ -236,6 +236,13 @@ LitePan 有目录缓存，秒传文件的云端列表可能延迟。请在自动
 <summary>显示「上传失败」但云端其实已有该文件？</summary>
 
 大文件上传后光鸭列表索引有分钟级延迟，插件会在确认不到时按「已上传」记录并事后收敛；可搜索日志 `上传诊断` 定位。秒传（上传票据返回 156）也属正常。
+
+</details>
+
+<details>
+<summary>从早期版本升级后插件不显示 / 配置丢失？</summary>
+
+v1.3.0 起插件 ID 全量改为 `guangyasync`（目录、类名、配置前缀、API、存储标识同步变更），**不同插件 ID 视为两个不同插件**，不会自动继承旧实例的配置与登录态。请在插件管理页卸载旧实例，重新安装「光鸭同步」，并重新扫码登录。
 
 </details>
 

@@ -6,7 +6,7 @@
           <v-icon icon="mdi-duck" size="26" />
         </div>
         <div class="ap-header__meta">
-          <div class="ap-header__title">Strm2Emby</div>
+          <div class="ap-header__title">光鸭同步</div>
           <div class="ap-header__sub">浏览 MoviePilot 主机文件并上传到光鸭云盘</div>
         </div>
       </div>
@@ -81,7 +81,7 @@ const status = reactive({
   sync_remote_dir: '/',
 })
 
-const currentPluginId = computed(() => props.pluginId || props.sourcePluginId || 'Strm2Emby')
+const currentPluginId = computed(() => props.pluginId || props.sourcePluginId || 'guangyasync')
 
 async function loadStatus() {
   loading.value = true

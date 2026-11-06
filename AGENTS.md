@@ -1,4 +1,4 @@
-# AGENTS.md — Strm2Emby 接手文档
+# AGENTS.md — 光鸭同步 接手文档
 
 面向**接手本仓库的 AI / 开发者**。描述**当前代码的真实结构、行为、坑与流程**，尽量给可验证的事实与命令，不给空话。
 敏感信息（token、密码、主机账号）一律不写入本文件，用占位符。
@@ -8,10 +8,11 @@
 ## 0. 一分钟速览
 
 - 这是什么：**MoviePilot V3 插件**，把「光鸭云盘」接入为 MoviePilot（下称 MP）的一种**存储**，并在整理成功后**联动上传成品文件**，另提供**手动上传**、**上传记录/进度**、**LitePan 联动**。
-- 插件 ID / 主类 / 存储名 / 配置前缀：`Strm2Emby` / `Strm2Emby` / `Strm2Emby`（`_disk_name`）/ `strm2emby_`。
+- 插件 ID / 主类 / 存储名 / 配置前缀：`guangyasync` / `guangyasync` / `guangyasync`（`_disk_name`）/ `guangyasync_`。
+- 显示名称：**光鸭同步**（见 `guangyasync._display_name`）；v1.3.0 起显示名与技术 ID 一并定稿，**不兼容早期插件 ID 的安装**（旧实例需卸载重装并重新扫码，配置不迁移）。
 - 仓库：`git@github.com:tardlk/MoviePilot-Plugins.git`（分支 `main`）。
-- 插件目录：`plugins.v3/strm2emby/`（目录名 = 类名小写，MP 硬约定）。
-- 前端：Vue3 + Vuetify + Module Federation，产物 `plugins.v3/strm2emby/dist/assets/`（**必须提交**，宿主加载 `remoteEntry.js`）。
+- 插件目录：`plugins.v3/guangyasync/`（目录名 = 类名小写，MP 硬约定）。
+- 前端：Vue3 + Vuetify + Module Federation，产物 `plugins.v3/guangyasync/dist/assets/`（**必须提交**，宿主加载 `remoteEntry.js`）。
 - 依赖：仅 `oss2` 由 MP 宿主内置（v1.2.0 起不再使用 `apscheduler` / `watchfiles`）；插件**不再放 `pyproject.toml`**（见 §7 坑位）。
 - 三个核心文件：`__init__.py`（主类）/ `guangya_client.py`（HTTP 传输层）/ `guangya_api.py`（存储语义层）。
 
@@ -27,9 +28,9 @@ MoviePilot-Plugins/
 ├── package.v3.json               # 插件市场索引（V3），版本/历史/release 开关
 ├── .gitignore
 ├── .github/workflows/release.yml # 推送 package.v3.json 变更时自动打 Release
-├── icons/Strm2Emby.png
-└── plugins.v3/strm2emby/
-    ├── __init__.py               # 主类 Strm2Emby：生命周期/配置/API/存储契约/整理联动/上传/进度/事件
+├── icons/guangyasync.png
+└── plugins.v3/guangyasync/
+    ├── __init__.py               # 主类 guangyasync：生命周期/配置/API/存储契约/整理联动/上传/进度/事件
     ├── guangya_client.py         # 传输层 GuangYaClient：请求头、错误码、token 刷新、限流、设备码登录、上传票据、OSS 分片
     ├── guangya_api.py            # 存储层 GuangYaApi：分页列举、get_item(_strict)、任务型增删改、上传/秒传、usage/snapshot、缓存
     ├── models.py                 # get_api() 的 Pydantic 请求/响应模型
@@ -57,7 +58,7 @@ MoviePilot-Plugins/
 ### 2.1 存储 = 模块方法契约
 
 MP 通过 `get_module()` 暴露的方法调用插件存储能力（契约见 MP 源码 `app/runtime/extensions/module/contracts.py`）。
-本插件在 `Strm2Emby.get_module()` 暴露 16 个方法：
+本插件在 `guangyasync.get_module()` 暴露 16 个方法：
 
 ```
 list_files, any_files, download_file, upload_file, delete_file, rename_file,
@@ -79,7 +80,7 @@ support_transtype, storage_manage, create_folder, get_folder, exists, get_item
 1. `init_plugin()` 里注册存储类型（append 语义，需先查重，避免重复条目）：
 
    ```python
-   StorageHelper().add_storage(storage="Strm2Emby", name="Strm2Emby", conf={})
+   StorageHelper().add_storage(storage="guangyasync", name="guangyasync", conf={})
    ```
 
 2. 监听链事件，把存储操作对象注入：
@@ -116,7 +117,7 @@ def transfer_complete(self, event): ...
 
 ## 3. 插件 API（`auth: bear`，统一 `schemas.Response[T]`）
 
-| 方法 | 路径（前缀 `/api/v1/plugin/Strm2Emby`） | 说明 |
+| 方法 | 路径（前缀 `/api/v1/plugin/guangyasync`） | 说明 |
 |---|---|---|
 | GET / POST | `/config` | 读取 / 保存配置（整份字段写入，见 §4） |
 | GET | `/login/qrcode` | 获取扫码二维码（每次重建 `device_id` 并持久化） |
@@ -146,7 +147,7 @@ def transfer_complete(self, event): ...
 - `GET /config` 返回 `_config_dict()`（脱敏）。
 - 前端 `DirectorySync.vue` 保存时只提交 `sync_*` 字段，靠 `_merge_config` 保留其他字段；`Config.vue` 保存时提交大部分字段。
 
-### 配置字段（前缀 `strm2emby_`）
+### 配置字段（前缀 `guangyasync_`）
 
 存储/登录：`enabled`、`access_token`、`refresh_token`、`client_id`、`device_id`、
 `poll_interval`、`page_size`、`order_by`、`sort_type`、`min_interval`、`permanently_delete`。
@@ -224,7 +225,7 @@ v1.2.0 起移除了实时目录监控、强制轮询、Cron 定时与全量同�
 
 | 现象 | 根因 | 处理 |
 |---|---|---|
-| 进「存储/目录」弹「不支持的存储类型：Strm2Emby」 | 未实现 `storage_manage` 模块方法 | 实现并声明 |
+| 进「存储/目录」弹「不支持的存储类型：guangyasync」 | 未实现 `storage_manage` 模块方法 | 实现并声明 |
 | `snapshot_storage() got an unexpected keyword argument 'previous_snapshot'` | V3 契约新增参数 | 方法签名补齐 |
 | `StorageChain.get_folder()` 返回 None | 未声明 `get_folder` | 增加模块方法 |
 | 云端文件被外部删后重复同步仍「跳过」 | `_item_cache` 未失效 | 每轮 `clear_cache()` |
@@ -235,7 +236,7 @@ v1.2.0 起移除了实时目录监控、强制轮询、Cron 定时与全量同�
 
 ### 存储名变更注意
 
-`_disk_name` 是 `FileItem.storage` 与归属判断的取值。把它从「光鸭云盘」改成「Strm2Emby」后，
+`_disk_name` 是 `FileItem.storage` 与归属判断的取值。把它从「光鸭云盘」改成插件 ID 后，
 **历史 FileItem / 已记录条目会失配**。新装无碍；若从旧版升级需注意。
 
 ---
@@ -276,7 +277,7 @@ v1.2.0 是破坏性变更：实时目录监控（含绿联 UGOS 高级 ACL 的 i
 ### 前端
 
 ```bash
-cd plugins.v3/strm2emby
+cd plugins.v3/guangyasync
 npm install
 npm run build:web      # 生成 dist/
 npm run build          # build:web + build:zip（额外生成可上传的 zip）
@@ -298,12 +299,12 @@ npm run build          # build:web + build:zip（额外生成可上传的 zip）
 按目录 `plugins.v3/<id_lower>` 打包 → Tag `插件ID_v版本`，资产 `插件目录小写_v版本.zip`；
 目录自上一个同 Tag 以来无变化则跳过；同版本重跑会删旧 Release 重建。
 
-本地手动打包：`npm run build:zip` → `strm2emby.zip`。
+本地手动打包：`npm run build:zip` → `guangyasync.zip`。
 
 ### 校验建议
 
 ```bash
-python3 -m py_compile plugins.v3/strm2emby/__init__.py plugins.v3/strm2emby/*.py
+python3 -m py_compile plugins.v3/guangyasync/__init__.py plugins.v3/guangyasync/*.py
 node --check <打包脚本转 .mjs>
 ```
 
@@ -314,20 +315,20 @@ node --check <打包脚本转 .mjs>
 > 具体主机名/账号/密码不写入文档；以下为结构示意。
 
 - MP 以 Docker 容器运行（镜像 `jxxghp/moviepilot-v3`），容器名假设 `moviepilot`。
-- 插件安装目录（容器内）：`/app/app/plugins/strm2emby`
-- 备份目录：`/config/plugins_backup/strm2emby`（容器重建后据此恢复）
-- 插件日志：`/config/logs/plugins/strm2emby.log`
+- 插件安装目录（容器内）：`/app/app/plugins/guangyasync`
+- 备份目录：`/config/plugins_backup/guangyasync`（容器重建后据此恢复）
+- 插件日志：`/config/logs/plugins/guangyasync.log`
 - 主日志：`/config/logs/moviepilot.log`
 - 插件配置持久化：`/config/user.db` 的 `plugininstance.config_data`（JSON）
 - 常用操作：
 
   ```bash
   # 部署新版本（把本地插件目录内容拷进容器）
-  docker cp <本地>/strm2emby/. moviepilot:/app/app/plugins/strm2emby/
+  docker cp <本地>/guangyasync/. moviepilot:/app/app/plugins/guangyasync/
   # 同步备份，避免容器重建后回退
-  docker exec moviepilot sh -c 'rm -rf /config/plugins_backup/strm2emby && cp -r /app/app/plugins/strm2emby /config/plugins_backup/strm2emby'
+  docker exec moviepilot sh -c 'rm -rf /config/plugins_backup/guangyasync && cp -r /app/app/plugins/guangyasync /config/plugins_backup/guangyasync'
   # 热重载插件
-  curl -X POST -H "Authorization: Bearer <token>" http://<MP>:4000/api/v1/plugin/reload/Strm2Emby
+  curl -X POST -H "Authorization: Bearer <token>" http://<MP>:4000/api/v1/plugin/reload/guangyasync
   ```
 
 - **热重载边界**：MP 的 reload 会清理插件子模块缓存（日志 `loader.py - 插件 ... 共清除 N 个模块缓存`），
@@ -343,13 +344,13 @@ curl -X POST http://<MP>:4000/api/v1/login/access-token \
 
 # 插件列表/状态、配置、进度、记录
 curl -H "Authorization: Bearer $TOKEN" http://<MP>:4000/api/v1/plugin/
-curl -H "Authorization: Bearer $TOKEN" http://<MP>:4000/api/v1/plugin/Strm2Emby/config
-curl -H "Authorization: Bearer $TOKEN" http://<MP>:4000/api/v1/plugin/Strm2Emby/progress
-curl -H "Authorization: Bearer $TOKEN" http://<MP>:4000/api/v1/plugin/Strm2Emby/history?limit=20
+curl -H "Authorization: Bearer $TOKEN" http://<MP>:4000/api/v1/plugin/guangyasync/config
+curl -H "Authorization: Bearer $TOKEN" http://<MP>:4000/api/v1/plugin/guangyasync/progress
+curl -H "Authorization: Bearer $TOKEN" http://<MP>:4000/api/v1/plugin/guangyasync/history?limit=20
 
 # 浏览该存储（走插件 list_files）
 curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"storage":"Strm2Emby","path":"/","type":"dir","name":""}' \
+  -d '{"storage":"guangyasync","path":"/","type":"dir","name":""}' \
   'http://<MP>:4000/api/v1/storage/list?page=1&count=100'
 ```
 

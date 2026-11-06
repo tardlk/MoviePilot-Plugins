@@ -174,7 +174,7 @@ function emptyProgress() {
 }
 
 function currentPluginId() {
-  return props.pluginId || props.sourcePluginId || 'Strm2Emby'
+  return props.pluginId || props.sourcePluginId || 'guangyasync'
 }
 
 async function request(path, options = {}) {

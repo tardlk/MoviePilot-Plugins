@@ -60,14 +60,14 @@ const currentImports = {};
       const exportSet = new Set(['Module', '__esModule', 'default', '_export_sfc']);
       let moduleMap = {
 "./Page":()=>{
-      dynamicLoadingCss(["Page-ff398e38.css"], false, './Page');
-      return __federation_import('./__federation_expose_Page-86789548.js').then(module =>Object.keys(module).every(item => exportSet.has(item)) ? () => module.default : () => module)},
+      dynamicLoadingCss(["Page-3d16a103.css"], false, './Page');
+      return __federation_import('./__federation_expose_Page-6248910b.js').then(module =>Object.keys(module).every(item => exportSet.has(item)) ? () => module.default : () => module)},
 "./Config":()=>{
-      dynamicLoadingCss(["Config-5a260d6c.css"], false, './Config');
-      return __federation_import('./__federation_expose_Config-7e1bca41.js').then(module =>Object.keys(module).every(item => exportSet.has(item)) ? () => module.default : () => module)},
+      dynamicLoadingCss(["Config-927dc922.css"], false, './Config');
+      return __federation_import('./__federation_expose_Config-39169282.js').then(module =>Object.keys(module).every(item => exportSet.has(item)) ? () => module.default : () => module)},
 "./AppPage":()=>{
-      dynamicLoadingCss(["AppPage-1ca8fc22.css"], false, './AppPage');
-      return __federation_import('./__federation_expose_AppPage-70f1b362.js').then(module =>Object.keys(module).every(item => exportSet.has(item)) ? () => module.default : () => module)},};
+      dynamicLoadingCss(["AppPage-f5a8ee95.css"], false, './AppPage');
+      return __federation_import('./__federation_expose_AppPage-d01a9662.js').then(module =>Object.keys(module).every(item => exportSet.has(item)) ? () => module.default : () => module)},};
       const seen = {};
       const dynamicLoadingCss = (cssFilePaths, dontAppendStylesToHead, exposeItemName) => {
         const metaUrl = import.meta.url;
@@ -108,7 +108,7 @@ const currentImports = {};
          }
          
           if (dontAppendStylesToHead) {
-            const key = 'css__Strm2Emby__' + exposeItemName;
+            const key = 'css__guangyasync__' + exposeItemName;
             window[key] = window[key] || [];
             window[key].push(href);
             return;
