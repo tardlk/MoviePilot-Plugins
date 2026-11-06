@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import threading
 import time
 import uuid
@@ -86,6 +87,20 @@ _TRANSFER_RESUME_DEBOUNCE = 3
 # 待上传队列持久化键；上传途中退出时据此补传未完成的整理成品
 _TRANSFER_PENDING_KEY = "transfer_pending"
 
+# 季目录名：宿主 V3 的 target_diritem 实际指向「成品文件所在的直接父目录」，
+# 剧集整理时该目录是 Season N / S01 / 第 N 季，而不是剧名目录。
+_SEASON_DIR_RE = re.compile(
+    r"^(?:season[\s._-]*\d+|s\d{1,3}|第\s*\d+\s*季|specials?|extras?|特典)$",
+    re.IGNORECASE,
+)
+# 媒体库分类目录名：命中时把剧集的本地基准再往上提一级，
+# 使云端「分类 / 剧名 / Season N」与电影的「分类 / 文件名」保持同构。
+_LIBRARY_CATEGORY_NAMES = frozenset({
+    "电影", "影片", "电视剧", "剧集", "连续剧", "动画", "动漫", "番剧", "纪录片", "综艺", "影视", "媒体",
+    "movies", "movie", "tv", "tvshows", "tv shows", "shows", "series", "anime",
+    "documentaries", "documentary", "media",
+})
+
 # 上传阶段标识（用于把「计算哈希」等阶段透传给前端）
 PHASE_HASHING = "hashing"
 PHASE_UPLOADING = "uploading"
@@ -111,7 +126,7 @@ class guangyasync(_PluginBase):
     plugin_name = _display_name
     plugin_desc = "使 MoviePilot 存储支持光鸭云盘，整理成功后联动上传，并提供手动上传与 LitePan 联动。"
     plugin_icon = "https://raw.githubusercontent.com/tardlk/MoviePilot-Plugins/main/icons/guangyasync.png"
-    plugin_version = "1.3.1"
+    plugin_version = "1.3.2"
     plugin_author = "tardlk"
     author_url = "https://github.com/tardlk"
     plugin_config_prefix = "guangyasync_"
@@ -1236,13 +1251,19 @@ class guangyasync(_PluginBase):
         """
         从整理事件推导「本地基准目录」与「云端子目录名」。
 
-        优先使用 ``transferinfo.target_diritem``（宿主标记的转移后媒体目录，
-        通常是片名 / 剧名目录）；缺失时回退到 target_item 或 file_list_new
-        所在的目录。三者都不可用时返回 ``(None, "")``，由 ``_sync_file``
-        直接按文件名上传。
+        优先使用 ``transferinfo.target_diritem``；缺失时回退到 target_item 或
+        file_list_new 所在的目录。三者都不可用时返回 ``(None, "")``，由
+        ``_sync_file`` 直接按文件名上传。
 
-        :return: (本地基准目录, 云端子目录名)。子目录名即媒体目录名，
-            用于在不手填源目录的前提下保留一层片名目录、避免同名文件互相覆盖。
+        宿主 V3 的 ``target_diritem`` 虽然注释写「媒体的根目录」，实际由
+        ``transhandler`` 取的是**成品文件所在的直接父目录**：电影是分类目录
+        （如 ``/Media/电影``），剧集却是季目录（如
+        ``/Media/电视剧/剧名/Season 1``）。若直接用它当基准，剧集会丢掉剧名层，
+        多部剧的 Season 1 全挤在云端同一个目录里。因此命中季目录时先往上提到
+        剧名目录；剧名目录的父目录若是媒体库分类目录，则再提一级到分类目录，
+        使云端结构成为「分类 / 剧名 / Season N / 文件」，与电影同构。
+
+        :return: (本地基准目录, 云端子目录名)。
         """
         diritem = cls._event_get(transferinfo, "target_diritem")
         raw = cls._event_get(diritem, "path") if diritem else None
@@ -1259,6 +1280,17 @@ class guangyasync(_PluginBase):
         if not raw:
             return None, ""
         root = Path(str(raw))
+        if _SEASON_DIR_RE.match(root.name):
+            parent = root.parent
+            if parent.as_posix() != "/":
+                grandparent = parent.parent
+                if (
+                    grandparent.as_posix() != "/"
+                    and grandparent.name.lower() in _LIBRARY_CATEGORY_NAMES
+                ):
+                    root = grandparent
+                else:
+                    root = parent
         name = root.name
         if not name or root.as_posix() == "/":
             return None, ""

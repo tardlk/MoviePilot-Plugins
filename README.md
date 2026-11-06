@@ -4,7 +4,7 @@
 
 **把「光鸭云盘」接入 MoviePilot 存储，在整理完成后联动上传成品文件，并提供手动上传、上传记录与 LitePan 联动。**
 
-[![version](https://img.shields.io/badge/version-1.3.1-blue?style=flat-square)](https://github.com/tardlk/MoviePilot-Plugins/releases)
+[![version](https://img.shields.io/badge/version-1.3.2-blue?style=flat-square)](https://github.com/tardlk/MoviePilot-Plugins/releases)
 [![MoviePilot](https://img.shields.io/badge/MoviePilot-V3-6C63FF?style=flat-square)](https://github.com/jxxghp/MoviePilot)
 [![license](https://img.shields.io/badge/license-GPL--3.0-success?style=flat-square)](LICENSE)
 [![author](https://img.shields.io/badge/author-tardlk-0ea5e9?style=flat-square)](https://github.com/tardlk)
@@ -21,7 +21,7 @@
 | :-- | :-- |
 | 插件 ID | `guangyasync` |
 | 显示名称 | 光鸭同步 |
-| 版本 | v1.3.1 |
+| 版本 | v1.3.2 |
 | 标签 | 存储、工具 |
 | 作者 | [tardlk](https://github.com/tardlk) |
 | 兼容 | MoviePilot **V3**（`system_version: ">=3.0.0"`，不兼容 V2） |
@@ -74,7 +74,14 @@
 
 插件**不再扫描本地目录，也不需要填写任何本地路径**。唯一的自动上传入口是订阅 MoviePilot「整理完成」事件：直接读取事件里的整理结果（`target_item` / `file_list_new`）与媒体目录（`target_diritem`），把成品文件上传到光鸭云盘。事件顶层的 `fileitem` 是下载源文件，不会上传。
 
-云端路径为「目标目录 / 媒体目录名 / 文件相对路径」，例如整理产出 `/media/电影/阿凡达 (2009)/阿凡达.mkv` 会落到 `/Media/阿凡达 (2009)/阿凡达.mkv`。媒体目录信息由 MoviePilot 提供；缺失时回退到目标文件所在目录，再缺失则直接按文件名上传。
+云端路径为「目标目录 / 媒体目录名 / 文件相对路径」。宿主 V3 的 `target_diritem` 实际指向**成品文件所在的直接父目录**：电影是分类目录，剧集却是 `Season N`。插件会识别季目录（`Season 1` / `S01` / `第 2 季` / `Specials` 等）并向上提到剧名层，若上一级是常见媒体库分类目录（`电视剧` / `TV Shows` 等）再提一级，使云端结构与本地媒体库同构：
+
+| 本地成品 | 云端 |
+| :-- | :-- |
+| `/Media/电影/复仇行动 (2017) {tmdb-445954}….mkv` | `/目标目录/电影/复仇行动 (2017) {tmdb-445954}….mkv` |
+| `/Media/电视剧/嫁金钗 (2026)/Season 1/嫁金钗-S01E30….mkv` | `/目标目录/电视剧/嫁金钗 (2026)/Season 1/嫁金钗-S01E30….mkv` |
+
+分类目录名不匹配（自定义库）时至少保留剧名层；缺失目录信息时回退到目标文件所在目录，再缺失则直接按文件名上传。
 
 在左侧「整理 → 光鸭同步」全页的「整理联动上传」卡片中设置：
 

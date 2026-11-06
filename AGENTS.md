@@ -204,8 +204,12 @@ v1.2.0 起移除了实时目录监控、强制轮询、Cron 定时与全量同�
 2. 要求 `transferinfo.success` 且非 `overwrite_skipped`。
 3. 只收 `target_item` / `file_list_new`（**不收顶层 `fileitem`**，那是下载源），
    按路径去重、要求绝对路径；`storage` 就是本插件时跳过（已在云端）。
-4. `_resolve_transfer_dir()` 从 `target_diritem` 推导本地基准目录与云端子目录名；
-   缺失时回退到目标文件所在目录，再缺失则按文件名扁平上传。
+4. `_resolve_transfer_dir()` 从 `target_diritem` 推导本地基准目录与云端子目录名。
+   宿主 V3 实际给的是「成品文件的直接父目录」（剧集是 `Season N` 而非剧名目录），
+   故命中 `_SEASON_DIR_RE`（Season N / S01 / 第 N 季 / Specials）时先上提到剧名层；
+   剧名层的父目录若在 `_LIBRARY_CATEGORY_NAMES`（电视剧 / TV Shows 等）内再提一级，
+   云端成为「分类 / 剧名 / Season N / 文件」，与电影同构；分类名不匹配时至少保留剧名层。
+   缺失 `target_diritem` 时回退到目标文件所在目录，再缺失则按文件名扁平上传。
 5. 待上传集合按文件保存 `(source, subdir)`，5 秒去抖合并后交给后台线程
    `_run_transfer_upload`；云端路径为 `sync_remote_dir / subdir / 相对路径`。
    结果记入进度与上传记录，并在有成功上传时调度 LitePan 通知。
