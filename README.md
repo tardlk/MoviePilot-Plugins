@@ -4,7 +4,7 @@
 
 **把「光鸭云盘」接入 MoviePilot 存储，在整理完成后联动上传成品文件，并提供手动上传、上传记录与 LitePan 联动。**
 
-[![version](https://img.shields.io/badge/version-1.3.0-blue?style=flat-square)](https://github.com/tardlk/MoviePilot-Plugins/releases)
+[![version](https://img.shields.io/badge/version-1.3.1-blue?style=flat-square)](https://github.com/tardlk/MoviePilot-Plugins/releases)
 [![MoviePilot](https://img.shields.io/badge/MoviePilot-V3-6C63FF?style=flat-square)](https://github.com/jxxghp/MoviePilot)
 [![license](https://img.shields.io/badge/license-GPL--3.0-success?style=flat-square)](LICENSE)
 [![author](https://img.shields.io/badge/author-tardlk-0ea5e9?style=flat-square)](https://github.com/tardlk)
@@ -21,7 +21,7 @@
 | :-- | :-- |
 | 插件 ID | `guangyasync` |
 | 显示名称 | 光鸭同步 |
-| 版本 | v1.3.0 |
+| 版本 | v1.3.1 |
 | 标签 | 存储、工具 |
 | 作者 | [tardlk](https://github.com/tardlk) |
 | 兼容 | MoviePilot **V3**（`system_version: ">=3.0.0"`，不兼容 V2） |
@@ -217,6 +217,15 @@ npm run build          # build:web + build:zip，额外生成可上传的 zip
 ---
 
 ## 常见问题
+
+<details>
+<summary>上传到一半重启了 MoviePilot，会丢文件吗？</summary>
+
+插件**不删除本地源文件**，本地成品始终安全。v1.3.1 起整理联动的待上传队列会落盘：去抖窗口内或上传途中进程退出，重启后会自动补传未完成的文件；已完成的条目会逐文件移除，不会重复上传（默认「跳过」再兜一层）。上传记录也改为每文件即时写入，中断不会丢整批记录。进度条仍只存内存，重启后会清空。
+
+若同名策略选「覆盖」且重启正好卡在删除云端旧文件之后、新版传完之前，云端会短暂缺文件，手动重传即可恢复；默认「跳过」无此问题。OSS 分片 checkpoint 虽落盘，但插件不会扫描恢复，跨重启仍是从头重传该文件。
+
+</details>
 
 <details>
 <summary>装好后找不到入口？</summary>

@@ -143,6 +143,7 @@ def transfer_complete(self, event): ...
 - 本插件统一走：
   - `_full_config()`：内存完整配置（含 token/API Key）；
   - `_merge_config(payload)`：以内存为基线叠加提交字段，**忽略客户端提交的 token**（只能扫码流程写入）；
+- `save_data("transfer_pending")`：整理联动的待上传队列（重启恢复用，见 §8）；
   - `_persist_config()` / `update_config(self._full_config())`。
 - `GET /config` 返回 `_config_dict()`（脱敏）。
 - 前端 `DirectorySync.vue` 保存时只提交 `sync_*` 字段，靠 `_merge_config` 保留其他字段；`Config.vue` 保存时提交大部分字段。
@@ -246,7 +247,8 @@ v1.2.0 起移除了实时目录监控、强制轮询、Cron 定时与全量同�
 - `exists()` 未做归属让路（非本存储返回 `False` 而非 `None`），与文件头约定不一致，建议修。
 - `GET /config` 每次都实时请求光鸭 API 拉账户统计（状态页/前端刷新会触发）。
 - 未实现 `media_files`、`transfer`、`plan_transfer`/`execute_transfer_plan` 等整理计划内部接口。
-- 进度 `self._progress` 存内存，重载即清空；上传**记录**持久化（`save_data("upload_history")`，上限 500 条）。
+- 进度 `self._progress` 存内存，重载即清空；上传**记录**每处理完一个文件即写盘（`save_data("upload_history")`，上限 500 条，`_history_lock` 保护）。
+- 整理联动待上传队列持久化在 `save_data("transfer_pending")`：`_schedule_transfer_upload` 写全量，上传线程每完成一个文件调 `_drop_transfer_pending` 删对应条目，`init_plugin` 调 `_restore_transfer_pending()` 过滤已消失的本地文件后重排 Timer（延迟 3 秒）。因此进程在去抖窗口或上传途中退出时，未完成文件会在重启后自动补传；读取队列遇到瞬时数据库故障会按 10 秒间隔最多重试 2 次（队列保留不丢）。`stop_service()` 只派发队列、不再清空。
 - 插件不重命名媒体文件：上传的是整理链产出的成品路径，按相对路径原样落到云端。
 - 大文件上传后光鸭列表索引有分钟级延迟，OSS 成功只做短等待即按「已上传」记录，最终一致。
 - `/fs/list` 浏览的是 **MP 容器内可见路径**，不是 NAS 全盘。
@@ -332,7 +334,7 @@ node --check <打包脚本转 .mjs>
   ```
 
 - **热重载边界**：MP 的 reload 会清理插件子模块缓存（日志 `loader.py - 插件 ... 共清除 N 个模块缓存`），
-  通常足够；**但若改动涉及依赖/模块级行为仍以重启容器最稳**。重启会使登录 token 失效，需要重新登录。
+  通常足够；**但若改动涉及依赖/模块级行为仍以重启容器最稳**。登录 token 持久化在 `plugininstance.config_data`，重启容器不会失效，无需重新扫码（仅卸载重装或更换插件 ID 才需要）。
 - 插件是否标记本地：`GET /api/v1/plugin/` 里 `is_local=true`、`runtime_status` 应为 `active`。
 
 ### 关键接口备忘（用于排障）

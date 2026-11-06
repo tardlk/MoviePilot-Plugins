@@ -5,7 +5,7 @@ MoviePilot V3 插件：把「光鸭云盘」接入 MoviePilot 存储，在整理
 - 插件 ID / 主类：`guangyasync`
 - 存储类型标识：`guangyasync`（与插件 ID 一致）
 - 配置前缀：`guangyasync_`
-- 版本：`1.3.0`
+- 版本：`1.3.1`
 - 兼容：MoviePilot `>=3.0.0`（V3）
 
 ## 文件职责

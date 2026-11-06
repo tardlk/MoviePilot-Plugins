@@ -30,6 +30,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import threading
 import time
@@ -80,6 +81,10 @@ TRIGGER_TRANSFER = "transfer"
 
 # 整理联动去抖秒数：一批整理事件静默该时长后合并为一次上传
 _TRANSFER_DEBOUNCE = 5
+# 重启恢复待上传队列时的延迟秒数（等客户端与登录态就绪）
+_TRANSFER_RESUME_DEBOUNCE = 3
+# 待上传队列持久化键；上传途中退出时据此补传未完成的整理成品
+_TRANSFER_PENDING_KEY = "transfer_pending"
 
 # 上传阶段标识（用于把「计算哈希」等阶段透传给前端）
 PHASE_HASHING = "hashing"
@@ -106,7 +111,7 @@ class guangyasync(_PluginBase):
     plugin_name = _display_name
     plugin_desc = "使 MoviePilot 存储支持光鸭云盘，整理成功后联动上传，并提供手动上传与 LitePan 联动。"
     plugin_icon = "https://raw.githubusercontent.com/tardlk/MoviePilot-Plugins/main/icons/guangyasync.png"
-    plugin_version = "1.3.0"
+    plugin_version = "1.3.1"
     plugin_author = "tardlk"
     author_url = "https://github.com/tardlk"
     plugin_config_prefix = "guangyasync_"
@@ -192,6 +197,7 @@ class guangyasync(_PluginBase):
         self._transfer_pending: Dict[str, Dict[str, Any]] = {}
         self._transfer_timer: Optional[threading.Timer] = None
         self._progress_lock = threading.Lock()
+        self._history_lock = threading.Lock()
 
         # 记录与进度
         self._upload_history: List[Dict[str, Any]] = []
@@ -219,6 +225,7 @@ class guangyasync(_PluginBase):
         self._load_upload_history()
         self._reset_progress()
         self._cancel_transfer_notify()
+        self._restore_transfer_pending()
         self._cancel_litepan_notify()
 
     def _load_config(self, config: dict) -> None:
@@ -418,10 +425,12 @@ class guangyasync(_PluginBase):
         return []
 
     def stop_service(self):
-        """退出插件：取消整理联动去抖与待发送的联动通知。"""
-        self._cancel_transfer_notify()
+        """退出插件：立即派发待上传队列并取消待发送的联动通知。
+
+        磁盘队列不清空，进程重启后由 ``init_plugin`` 恢复未完成条目。
+        """
+        self._flush_transfer_upload()
         self._cancel_litepan_notify()
-        self._reset_progress()
 
     # ── 配置读写 ──
 
@@ -922,18 +931,19 @@ class guangyasync(_PluginBase):
         }
 
     def _record_upload(self, records: List[Dict[str, Any]]) -> None:
-        """批量写入上传记录（新的在前，超过上限截断）。"""
+        """写入上传记录（新的在前，超过上限截断；每个文件即时持久化）。"""
         if not records:
             return
-        history = list(self._upload_history)
-        history[0:0] = records
-        if len(history) > self._upload_history_max:
-            del history[self._upload_history_max:]
-        self._upload_history = history
-        try:
-            self.save_data("upload_history", self._upload_history)
-        except Exception as err:  # noqa: BLE001
-            logger.error(f"【光鸭同步】保存上传记录失败: {err}")
+        with self._history_lock:
+            history = list(self._upload_history)
+            history[0:0] = records
+            if len(history) > self._upload_history_max:
+                del history[self._upload_history_max:]
+            self._upload_history = history
+            try:
+                self.save_data("upload_history", self._upload_history)
+            except Exception as err:  # noqa: BLE001
+                logger.error(f"【光鸭同步】保存上传记录失败: {err}")
 
     # ── API 注册 ──
 
@@ -1286,6 +1296,94 @@ class guangyasync(_PluginBase):
                 _add(item)
         return targets
 
+    def _persist_transfer_pending(self) -> None:
+        """把待上传队列写入插件数据，供进程重启后恢复（调用方持 _transfer_lock）。"""
+        payload: Dict[str, Any] = {}
+        for path, info in self._transfer_pending.items():
+            source = info.get("source")
+            payload[str(path)] = {
+                "source": source.as_posix() if isinstance(source, Path) else (str(source) if source else None),
+                "subdir": info.get("subdir") or "",
+                "ts": float(info.get("ts") or time.time()),
+            }
+        try:
+            self.save_data(_TRANSFER_PENDING_KEY, payload)
+        except Exception as err:  # noqa: BLE001
+            logger.warning(f"【光鸭同步】保存待上传队列失败: {err}")
+
+    def _drop_transfer_pending(self, path: Path) -> None:
+        """单个文件处理完成后，从持久化队列移除该条目。"""
+        key = path.as_posix()
+        with self._transfer_lock:
+            try:
+                saved = self.get_data(_TRANSFER_PENDING_KEY)
+            except Exception as err:  # noqa: BLE001
+                logger.debug(f"【光鸭同步】读取待上传队列失败: {err}")
+                return
+            if not isinstance(saved, dict) or key not in saved:
+                return
+            saved.pop(key, None)
+            try:
+                self.save_data(_TRANSFER_PENDING_KEY, saved)
+            except Exception as err:  # noqa: BLE001
+                logger.warning(f"【光鸭同步】清理待上传队列失败: {err}")
+
+    def _restore_transfer_pending(self, retry: int = 2) -> None:
+        """重启后恢复未完成队列：过滤已不存在的本地文件，重新排一次上传。
+
+        读取遇到瞬时数据库故障时延迟重试，队列仍留在磁盘，不会被丢弃。
+        """
+        try:
+            saved = self.get_data(_TRANSFER_PENDING_KEY)
+        except Exception as err:  # noqa: BLE001
+            logger.warning(f"【光鸭同步】读取待上传队列失败: {err}")
+            if retry > 0:
+                timer = threading.Timer(
+                    10, self._restore_transfer_pending, args=(retry - 1,)
+                )
+                timer.daemon = True
+                timer.start()
+            return
+        if isinstance(saved, str):
+            try:
+                saved = json.loads(saved)
+            except Exception:  # noqa: BLE001
+                saved = None
+        logger.debug(
+            "【光鸭同步】启动检查待上传队列: %s",
+            len(saved) if isinstance(saved, dict) else type(saved).__name__,
+        )
+        if not isinstance(saved, dict) or not saved:
+            return
+        if not self._enabled or not self._sync_on_transfer:
+            logger.info("【光鸭同步】整理联动未启用，待上传队列保留，等待重新启用后再补传")
+            return
+        restored: Dict[str, Dict[str, Any]] = {}
+        for path, info in saved.items():
+            if not isinstance(path, str) or not Path(path).is_file():
+                continue
+            info = info if isinstance(info, dict) else {}
+            raw_source = info.get("source")
+            restored[path] = {
+                "source": Path(raw_source) if raw_source else None,
+                "subdir": info.get("subdir") or "",
+                "ts": float(info.get("ts") or time.time()),
+            }
+        with self._transfer_lock:
+            self._transfer_pending.update(restored)
+            # 写回时顺便清掉已失效条目
+            self._persist_transfer_pending()
+            if not restored:
+                return
+            if self._transfer_timer is not None:
+                self._transfer_timer.cancel()
+            self._transfer_timer = threading.Timer(
+                _TRANSFER_RESUME_DEBOUNCE, self._flush_transfer_upload
+            )
+            self._transfer_timer.daemon = True
+            self._transfer_timer.start()
+        logger.info(f"【光鸭同步】重启恢复：{len(restored)} 个未完成的整理成品待补传")
+
     def _schedule_transfer_upload(
         self, jobs: List[Tuple[str, Optional[Path], str]]
     ) -> None:
@@ -1297,6 +1395,7 @@ class guangyasync(_PluginBase):
                     "subdir": subdir,
                     "ts": time.time(),
                 }
+            self._persist_transfer_pending()
             if self._transfer_timer is not None:
                 self._transfer_timer.cancel()
             self._transfer_timer = threading.Timer(
@@ -1306,7 +1405,7 @@ class guangyasync(_PluginBase):
             self._transfer_timer.start()
 
     def _cancel_transfer_notify(self) -> None:
-        """取消待执行的整理联动上传。"""
+        """取消待执行的整理联动上传（磁盘队列保留，供重启恢复）。"""
         with self._transfer_lock:
             if self._transfer_timer is not None:
                 self._transfer_timer.cancel()
@@ -1314,7 +1413,11 @@ class guangyasync(_PluginBase):
             self._transfer_pending.clear()
 
     def _flush_transfer_upload(self) -> None:
-        """去抖到期：批量上传整理后的文件（后台线程执行）。"""
+        """去抖到期：批量上传整理后的文件（后台线程执行）。
+
+        内存队列清空后磁盘队列仍保留，由上传线程逐文件完成时移除；
+        因此上传途中进程退出时，未完成的文件会在重启后自动补传。
+        """
         with self._transfer_lock:
             self._transfer_timer = None
             jobs = [
@@ -1339,7 +1442,6 @@ class guangyasync(_PluginBase):
             logger.error("【光鸭同步】整理联动上传失败：插件未初始化或未登录")
             return
         stats = {"uploaded": 0, "skipped": 0, "failed": 0}
-        records: List[Dict[str, Any]] = []
         try:
             with self._sync_lock:
                 remote_root = self._prepare_remote()
@@ -1373,12 +1475,13 @@ class guangyasync(_PluginBase):
                         error=result.get("error", ""),
                         flash=result.get("flash", False),
                     )
-                    records.append(self._build_record(TRIGGER_TRANSFER, result))
+                    self._record_upload([self._build_record(TRIGGER_TRANSFER, result)])
                     self._update_progress(
                         uploaded=stats["uploaded"],
                         skipped=stats["skipped"],
                         failed=stats["failed"],
                     )
+                    self._drop_transfer_pending(local)
                 self._finish_progress(stats, TRIGGER_TRANSFER)
                 logger.info(
                     f"【光鸭同步】整理联动完成：上传 {stats['uploaded']}，"
@@ -1387,7 +1490,6 @@ class guangyasync(_PluginBase):
         except Exception as err:  # noqa: BLE001
             logger.error(f"【光鸭同步】整理联动后台任务异常：{err}")
         finally:
-            self._record_upload(records)
             if stats["uploaded"] > 0:
                 self._schedule_litepan_notify()
 
@@ -1958,7 +2060,6 @@ class guangyasync(_PluginBase):
 
         remote_root = Path(remote_dir)
         stats = {"uploaded": 0, "skipped": 0, "failed": 0}
-        records: List[Dict[str, Any]] = []
 
         try:
             with self._sync_lock:
@@ -1976,8 +2077,8 @@ class guangyasync(_PluginBase):
                         if not self._guangya_api.get_folder(target_root):
                             logger.error(f"【光鸭同步】手动上传：无法创建光鸭目录 {target_root}")
                             stats["failed"] += 1
-                            records.append(
-                                {
+                            self._record_upload(
+                                [{
                                     "time": int(time.time()),
                                     "trigger": TRIGGER_MANUAL,
                                     "action": "failed",
@@ -1987,7 +2088,7 @@ class guangyasync(_PluginBase):
                                     "size": 0,
                                     "error": "无法创建光鸭目录",
                                     "flash": False,
-                                }
+                                }]
                             )
                             continue
                         for item in local.rglob("*"):
@@ -2022,7 +2123,7 @@ class guangyasync(_PluginBase):
                         error=result.get("error", ""),
                         flash=result.get("flash", False),
                     )
-                    records.append(self._build_record(TRIGGER_MANUAL, result))
+                    self._record_upload([self._build_record(TRIGGER_MANUAL, result)])
                     self._update_progress(
                         uploaded=stats["uploaded"],
                         skipped=stats["skipped"],
@@ -2032,7 +2133,6 @@ class guangyasync(_PluginBase):
         except Exception as err:  # noqa: BLE001
             logger.error(f"【光鸭同步】手动上传后台任务异常：{err}")
         finally:
-            self._record_upload(records)
             if stats["uploaded"] > 0:
                 self._schedule_litepan_notify()
             logger.info(
