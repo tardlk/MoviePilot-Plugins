@@ -52,12 +52,16 @@ from app.sdk.plugin import _PluginBase
 from app.sdk.services import StorageHelper
 
 from .guangya_api import GuangYaApi
-from .guangya_client import GuangYaClient
+from .guangya_client import GuangYaClient, RequestGate
+from .share_tasks import DEFAULTS as SHARE_DEFAULTS, ShareQueue, allowed_user, share_settings, validate_preview
+from .cloud_organizer import organize_cloud_directory
 from .models import (
     FsEntry,
     FsListData,
     LitePanNotifyData,
     LoginPollData,
+    OrganizePayload,
+    ShareSubmitPayload,
     PluginConfigData,
     PluginConfigPayload,
     QrCodeData,
@@ -124,9 +128,9 @@ class guangyasync(_PluginBase):
     # 与 FileItem.storage 统一为 guangyasync（v1.3.0 起定稿，不兼容早期 ID）。
     _display_name = "光鸭同步"
     plugin_name = _display_name
-    plugin_desc = "使 MoviePilot 存储支持光鸭云盘，整理成功后联动上传，并提供手动上传与 LitePan 联动。"
+    plugin_desc = "使 MoviePilot 支持光鸭云盘资源整理、整理联动上传、手动上传与 LitePan 联动。"
     plugin_icon = "https://raw.githubusercontent.com/tardlk/MoviePilot-Plugins/main/icons/guangyasync.png"
-    plugin_version = "1.3.2"
+    plugin_version = "1.5.0"
     plugin_author = "tardlk"
     author_url = "https://github.com/tardlk"
     plugin_config_prefix = "guangyasync_"
@@ -162,6 +166,9 @@ class guangyasync(_PluginBase):
         """初始化插件实例状态（全部为实例属性，不使用类属性承载可变状态）。"""
         super().__init__()
         # 运行态对象
+        self._share_config = dict(SHARE_DEFAULTS)
+        self._share_queue = None
+        self._request_gate = RequestGate()
         self._client: Optional[GuangYaClient] = None
         self._guangya_api: Optional[GuangYaApi] = None
 
@@ -242,6 +249,7 @@ class guangyasync(_PluginBase):
         self._cancel_transfer_notify()
         self._restore_transfer_pending()
         self._cancel_litepan_notify()
+        self._start_share_queue()
 
     def _load_config(self, config: dict) -> None:
         """从配置字典读取全部字段到实例属性。"""
@@ -260,6 +268,7 @@ class guangyasync(_PluginBase):
             except (TypeError, ValueError):
                 return default
 
+        self._share_config = {key: config.get(key, value) for key, value in SHARE_DEFAULTS.items()}
         self._enabled = bool(config.get("enabled"))
         self._access_token = (config.get("access_token") or "").strip()
         self._refresh_token = (config.get("refresh_token") or "").strip()
@@ -326,6 +335,7 @@ class guangyasync(_PluginBase):
             self.update_config(self._full_config())
             logger.info("【光鸭同步】Token 已自动保存")
 
+        self._request_gate.interval = max(self._min_interval, 0.5)
         try:
             self._client = GuangYaClient(
                 access_token=self._access_token,
@@ -334,6 +344,7 @@ class guangyasync(_PluginBase):
                 device_id=self._device_id,
                 on_token_refresh=on_token_refresh,
                 min_interval=self._min_interval,
+                request_gate=self._request_gate,
             )
             self._device_id = self._client.device_id
             try:
@@ -369,8 +380,10 @@ class guangyasync(_PluginBase):
 
     @staticmethod
     def get_command() -> List[Dict[str, Any]]:
-        """返回插件远程命令列表（当前未注册）。"""
-        return []
+        """显式命令也适用于宿主开启全局 AI 消息路由的情况。"""
+        return [{"cmd": "/guangya", "event": EventType.PluginAction,
+                 "desc": "光鸭分享转存并整理", "category": "整理",
+                 "data": {"action": "guangyasync_share"}}]
 
     @staticmethod
     def get_render_mode() -> Tuple[str, str]:
@@ -411,6 +424,7 @@ class guangyasync(_PluginBase):
     def _default_config(cls) -> Dict[str, Any]:
         """构造不含令牌的完整默认配置（字段与 `_full_config()` 对齐）。"""
         return {
+            **SHARE_DEFAULTS,
             "enabled": False,
             "client_id": GuangYaClient.DEFAULT_CLIENT_ID,
             "device_id": "",
@@ -444,6 +458,8 @@ class guangyasync(_PluginBase):
 
         磁盘队列不清空，进程重启后由 ``init_plugin`` 恢复未完成条目。
         """
+        if self._share_queue:
+            self._share_queue.stop()
         self._flush_transfer_upload()
         self._cancel_litepan_notify()
 
@@ -458,6 +474,7 @@ class guangyasync(_PluginBase):
         （例如联动设置、token）清空。
         """
         return {
+            **self._share_config,
             "enabled": self._enabled,
             "access_token": self._access_token,
             "refresh_token": self._refresh_token,
@@ -515,7 +532,10 @@ class guangyasync(_PluginBase):
             except (TypeError, ValueError):
                 return default
 
+        merged_share = share_settings({key: payload.get(key, base.get(key, default))
+                                       for key, default in SHARE_DEFAULTS.items()})
         return {
+            **merged_share,
             "enabled": _as_bool("enabled"),
             # 令牌只由扫码登录流程写入，忽略客户端提交，避免被清空或篡改
             "access_token": str(base.get("access_token") or ""),
@@ -574,6 +594,7 @@ class guangyasync(_PluginBase):
     def _config_dict(self) -> Dict[str, Any]:
         """构造配置/登录态/空间统计字典（不含任何令牌）。"""
         config: Dict[str, Any] = {
+            **self._share_config,
             "enabled": self._enabled,
             "client_id": self._client_id or GuangYaClient.DEFAULT_CLIENT_ID,
             "device_id": self._device_id,
@@ -970,6 +991,10 @@ class guangyasync(_PluginBase):
         并用 Pydantic 模型声明请求体与业务数据。
         """
         return [
+            {"path": "/share/jobs", "endpoint": self.api_share_jobs, "auth": "bear",
+             "methods": ["GET"], "summary": "分享任务记录（超级管理员）", "response_model": schemas.Response[dict]},
+            {"path": "/share/submit", "endpoint": self.api_share_submit, "auth": "bear",
+             "methods": ["POST"], "summary": "分享转存并整理（超级管理员）", "response_model": schemas.Response[dict]},
             {
                 "path": "/config",
                 "endpoint": self.api_get_config,
@@ -1025,6 +1050,14 @@ class guangyasync(_PluginBase):
                 "methods": ["GET"],
                 "summary": "浏览光鸭云盘目录（只读，仅返回子目录）",
                 "response_model": schemas.Response[RemoteListData],
+            },
+            {
+                "path": "/organize",
+                "endpoint": self.organize_remote,
+                "auth": "bear",
+                "methods": ["POST"],
+                "summary": "预览或提交光鸭云盘目录整理（仅超级管理员）",
+                "response_model": schemas.Response[dict],
             },
             {
                 "path": "/upload",
@@ -1083,7 +1116,8 @@ class guangyasync(_PluginBase):
             data=PluginConfigData(**self._config_dict()),
         )
 
-    def api_save_config(self, payload: PluginConfigPayload) -> schemas.Response[PluginConfigData]:
+    def api_save_config(self, payload: PluginConfigPayload,
+                        _user=Depends(get_current_active_superuser)) -> schemas.Response[PluginConfigData]:
         """
         保存插件配置（仅接受可编辑字段，令牌不参与保存）。
         """
@@ -1104,6 +1138,113 @@ class guangyasync(_PluginBase):
             logger.error(f"【光鸭同步】保存配置失败: {err}")
             return schemas.Response(success=False, message=f"保存配置失败: {err}")
 
+    # ── 分享转存与 Telegram 接入 ──
+
+    def _start_share_queue(self):
+        if self._share_queue:
+            self._share_queue.stop()
+        self._share_queue = ShareQueue(self.get_data_path(), self._share_services, self._share_notify)
+        if self._enabled and self._access_token:
+            self._share_queue.start()
+
+    def _share_services(self):
+        if not (self._enabled and self._access_token and self._client and self._guangya_api):
+            raise ValueError("请先启用插件并登录光鸭云盘")
+        import inspect
+        from app.chain.transfer import TransferChain
+        if "report_results" not in inspect.signature(TransferChain.manual_transfer).parameters:
+            raise ValueError("当前 MoviePilot 缺少实际整理回执接口，请升级后再提交分享")
+        return self._client, self._guangya_api, self._organize_share
+
+    def _organize_share(self, job):
+        from app.chain.transfer import TransferChain
+        config = job["settings"]
+        folder = self._guangya_api.get_item_strict(Path(job["staging_dir"]))
+        if not folder or folder.type != "dir":
+            raise ValueError("本次转存目录不存在")
+        options = dict(
+            fileitem=folder, target_storage=self._disk_name,
+            target_path=Path(config["share_target_dir"]),
+            transfer_type=config["share_transfer_type"], background=False,
+            report_results=True,
+            scrape=config["share_scrape"], library_type_folder=config["share_type_folder"],
+            library_category_folder=config["share_category_folder"], sync_extra_files=True,
+        )
+        chain = TransferChain()
+        validate_preview(*chain.manual_transfer(**options, preview=True))
+        return chain.manual_transfer(**options, preview=False, skip_success=False)
+
+    def _share_notify(self, job):
+        logger.info("【光鸭同步】分享任务 %s：%s", job["id"], job["message"])
+        recipient = job.get("recipient")
+        if not recipient or not self._share_config["telegram_enabled"] or not allowed_user(
+                recipient.get("userid"), self._share_config["telegram_user_ids"]):
+            return
+        from app.schemas.types import NotificationChannel, MessageType
+        try:
+            self.post_message(channel=NotificationChannel.Telegram, source=recipient.get("source"),
+                              mtype=MessageType.Plugin, private_delivery=True, parse_mode="plain",
+                              userid=recipient["userid"], title="光鸭分享任务 " + job["id"],
+                              text=job["message"] + "\n转存目录：" + job["staging_dir"])
+        except Exception as error:
+            logger.warning("【光鸭同步】分享任务通知失败：%s", type(error).__name__)
+
+    def _receive_share(self, data, command=False):
+        if not (self._enabled and self._share_config["telegram_enabled"]):
+            return
+        channel = data.get("channel")
+        if getattr(channel, "value", channel) != "Telegram":
+            return
+        user = str(data.get("user") if command else data.get("userid") or "")
+        if not allowed_user(user, self._share_config["telegram_user_ids"]):
+            return
+        # 仅处理私聊；不向群组或其他通知渠道发送分享信息。
+        if not command and str(data.get("chat_id") or user) != user:
+            return
+        text = str(data.get("arg_str") if command else data.get("text") or "")
+        if not command and "guangyapan.com" not in text.lower():
+            return
+        recipient = {"userid": user, "source": data.get("source")}
+        try:
+            self._share_services()
+            result = self._share_queue.submit(text, self._share_config, recipient)
+            message = ("该分享已有任务，请查看现有记录：" if result["duplicate"] else "已加入转存整理队列：") + result["id"]
+        except ValueError as error:
+            message = str(error)
+        except Exception as error:
+            message = "任务提交失败：" + type(error).__name__
+        self._share_notify({"id": "接收", "recipient": recipient, "message": message,
+                            "staging_dir": self._share_config["share_source_dir"]})
+
+    @eventmanager.register(EventType.UserMessage)
+    def share_user_message(self, event: Event):
+        data = event.event_data or {}
+        if hasattr(data, "model_dump"):
+            data = data.model_dump()
+        if isinstance(data, dict):
+            self._receive_share(data)
+
+    @eventmanager.register(EventType.PluginAction)
+    def share_plugin_action(self, event: Event):
+        data = event.event_data or {}
+        if isinstance(data, dict) and data.get("action") == "guangyasync_share":
+            self._receive_share(data, command=True)
+
+    def api_share_jobs(self, _user=Depends(get_current_active_superuser)) -> schemas.Response[dict]:
+        return schemas.Response(success=True, data={"items": self._share_queue.list() if self._share_queue else []})
+
+    def api_share_submit(self, payload: ShareSubmitPayload,
+                         _user=Depends(get_current_active_superuser)) -> schemas.Response[dict]:
+        try:
+            self._share_services()
+            result = self._share_queue.submit(payload.text, self._share_config)
+            return schemas.Response(success=True, message="已有任务" if result["duplicate"] else "已加入队列", data=result)
+        except ValueError as error:
+            return schemas.Response(success=False, message=str(error))
+        except Exception as error:
+            logger.error("【光鸭同步】提交分享任务失败：%s", type(error).__name__)
+            return schemas.Response(success=False, message="提交失败，请检查插件日志")
+
     # ── 存储契约：模块方法 ──
 
     def get_module(self) -> Dict[str, Any]:
@@ -1121,6 +1262,7 @@ class guangyasync(_PluginBase):
             "delete_file": self.delete_file,
             "rename_file": self.rename_file,
             "get_file_item": self.get_file_item,
+            "get_file_item_strict": self.get_file_item_strict,
             "get_parent_item": self.get_parent_item,
             "snapshot_storage": self.snapshot_storage,
             "storage_usage": self.storage_usage,
@@ -1547,7 +1689,7 @@ class guangyasync(_PluginBase):
 
         def _walk(_item: FileItem, _recursion: bool = False):
             """按需递归收集文件。"""
-            items = self._guangya_api.list(_item)
+            items = self._guangya_api.list_strict(_item)
             if not items:
                 return
             if _recursion:
@@ -1663,6 +1805,19 @@ class guangyasync(_PluginBase):
             logger.error("【光鸭同步】get_file_item 失败：插件未初始化或未登录")
             return None
         return self._guangya_api.get_item(path)
+
+    def get_file_item_strict(self, storage: str, path: Path) -> Optional[Any]:
+        """向宿主返回确认过的查询回执，故障不能被当成文件不存在。"""
+        if not self._own_storage(storage):
+            return None
+        # 旧版宿主没有严格查询回执；保留其原有普通查询能力。
+        result_type = getattr(schemas, "FileItemQueryResult", None)
+        if result_type is None:
+            return None
+        if not self._guangya_api:
+            from .guangya_api import StorageQueryError
+            raise StorageQueryError("光鸭云盘未初始化或未登录")
+        return result_type(item=self._guangya_api.get_item_strict(path))
 
     def get_parent_item(self, fileitem: schemas.FileItem) -> Optional[schemas.FileItem]:
         """获取父目录条目。"""
@@ -1906,6 +2061,8 @@ class guangyasync(_PluginBase):
             self._client._refresh_token = ""
         self._client = None
         self._guangya_api = None
+        if self._share_queue:
+            self._share_queue.stop()
         self._persist_config()
         return schemas.Response(success=True, message="已退出登录")
 
@@ -1935,7 +2092,7 @@ class guangyasync(_PluginBase):
                 return schemas.Response(
                     success=False, message=f"目录不存在或不是目录：{normalized}"
                 )
-            children = self._guangya_api.list(folder) or []
+            children = self._guangya_api.list_strict(folder)
         except Exception as err:  # noqa: BLE001
             logger.error(f"【光鸭同步】浏览云端目录失败 {normalized}: {err}")
             return schemas.Response(success=False, message=f"读取云端目录失败：{err}")
@@ -1957,6 +2114,29 @@ class guangyasync(_PluginBase):
             success=True,
             data=RemoteListData(path=normalized, parent=parent, items=items),
         )
+
+    def organize_remote(
+        self,
+        payload: OrganizePayload,
+        _: Any = Depends(get_current_active_superuser),
+    ) -> schemas.Response[dict]:
+        """POST /organize：由原生整理链在光鸭盘内整理，预览不写入。"""
+        if not self._enabled or not self._guangya_api or not self._access_token:
+            return schemas.Response(success=False, message="请先启用插件并登录光鸭云盘")
+        try:
+            state, result = organize_cloud_directory(self._guangya_api, payload, self._disk_name)
+            data = {"preview": payload.preview, "result": result if isinstance(result, dict) else {}}
+            if payload.preview:
+                default_message = "预览完成" if state else "预览完成，部分资源无法整理，请查看逐项结果"
+                message = (result.get("message") or default_message) if isinstance(result, dict) else str(result or default_message)
+            else:
+                message = "整理请求已提交，请在 MoviePilot 整理队列与整理记录中查看实际结果" if state else str(result or "提交失败")
+            return schemas.Response(success=bool(state), message=message, data=data)
+        except ValueError as err:
+            return schemas.Response(success=False, message=str(err))
+        except Exception as err:  # noqa: BLE001
+            logger.error(f"【光鸭同步】云盘整理请求失败: {err}")
+            return schemas.Response(success=False, message=f"云盘整理请求失败：{err}")
 
     # ── 本地目录浏览与手动上传 ──
 

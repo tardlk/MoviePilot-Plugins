@@ -34,18 +34,20 @@ archive.on('error', (err) => {
 
 archive.pipe(output)
 
-// 插件运行必需与可选的 Python 文件
+// 插件运行必需的 Python 文件
 const pluginFiles = [
   '__init__.py',
   'guangya_api.py',
   'guangya_client.py',
   'models.py',
+  'cloud_organizer.py',
+  'share_tasks.py',
 ]
 for (const file of pluginFiles) {
   const filePath = path.join(__dirname, file)
   if (fs.existsSync(filePath)) {
     archive.file(filePath, { name: file })
-  } else if (file === '__init__.py') {
+  } else {
     console.error(`\x1b[31m[打包失败]\x1b[0m 缺少必需文件: ${file}`)
     process.exit(1)
   }

@@ -230,7 +230,7 @@ class GuangYaApi:
             is_dir = False
         path = f"{parent_path.rstrip('/')}/{name}" if parent_path != "/" else f"/{name}"
         file_path = path + ("/" if is_dir else "")
-        size = self._first_value(item, ["fileSize", "size", "Size"], None)
+        size = self._first_value(item, ["fileSize", "totalSize", "size", "Size"], None)
         modify_time = self._parse_time(
             self._first_value(item, ["utime", "updateTime", "updatedAt", "UpdateAt", "modifyTime", "mtime"])
         )
@@ -262,7 +262,7 @@ class GuangYaApi:
         normalized_path = self._normalize_path(path)
         if normalized_path == "/":
             return ""
-        if normalized_path in self._id_cache:
+        if not strict and normalized_path in self._id_cache:
             return self._id_cache[normalized_path]
         current_id = ""
         current_path = "/"
@@ -301,7 +301,7 @@ class GuangYaApi:
             return [item] if item else []
 
         cache_key = self._normalize_path(parent_item.path or "/")
-        if not refresh and cache_key in self._dir_cache:
+        if not refresh and not strict and cache_key in self._dir_cache:
             return list(self._dir_cache[cache_key])
 
         try:
@@ -320,6 +320,7 @@ class GuangYaApi:
         items: List[schemas.FileItem] = []
         page = 0
         page_size = self._page_size
+        expected_total = 0
         while page < self._MAX_PAGES:
             try:
                 data = self.client.get_file_list(
@@ -337,14 +338,23 @@ class GuangYaApi:
                 # 查询失败不写入缓存，避免把临时故障固化成空目录
                 return items
             raw_list = self._extract_list(data)
+            total = int(data.get("total") or 0) if isinstance(data, dict) else 0
+            expected_total = max(expected_total, total)
             if not raw_list:
+                if strict and expected_total > len(items):
+                    raise GuangYaApiError("目录分页返回不完整，无法确认全部条目")
                 break
             for raw in raw_list:
                 items.append(self._to_file_item(raw, parent_item.path or "/"))
-            total = int(data.get("total") or 0) if isinstance(data, dict) else 0
+            if strict and len(raw_list) < page_size and expected_total > len(items):
+                raise GuangYaApiError("目录分页返回不完整，无法确认全部条目")
             if len(raw_list) < page_size or (total and len(items) >= total):
                 break
             page += 1
+        else:
+            if strict:
+                raise GuangYaApiError("目录分页超过上限，无法确认完整列表")
+            return items
         if len(self._dir_cache) >= self._CACHE_LIMIT:
             self._dir_cache.clear()
         self._dir_cache[cache_key] = list(items)
@@ -362,6 +372,13 @@ class GuangYaApi:
         if page_size and page_size > self._page_size:
             self._page_size = page_size
         return self._list_children(fileitem, strict=False, refresh=True)
+
+    def list_strict(self, fileitem: schemas.FileItem) -> List[schemas.FileItem]:
+        """完整实时列举；查询失败时中止整理，禁止使用部分列表。"""
+        try:
+            return self._list_children(fileitem, strict=True, refresh=True)
+        except (GuangYaApiError, GuangYaAuthError) as err:
+            raise StorageQueryError(f"无法完整读取目录 {fileitem.path}: {err}") from err
 
     def detail(self, fileitem: schemas.FileItem) -> Optional[schemas.FileItem]:
         """获取条目详情，按路径重新解析以保证信息最新。"""
@@ -412,16 +429,13 @@ class GuangYaApi:
         normalized = self._normalize_path(str(path))
         if normalized == "/":
             return self.get_item(path)
-        cached = self._item_cache.get(normalized)
-        if cached:
-            return schemas.FileItem(**cached)
         path_obj = Path(normalized)
         parent_path = path_obj.parent if path_obj.parent.as_posix() not in ("", ".") else Path("/")
         try:
             parent_id = self._path_to_id(parent_path.as_posix(), strict=True)
         except FileNotFoundError:
             return None
-        except GuangYaApiError as err:
+        except (GuangYaApiError, GuangYaAuthError) as err:
             raise StorageQueryError(f"无法确认父目录 {parent_path} 状态: {err}") from err
         parent = schemas.FileItem(
             storage=self._disk_name,
@@ -431,7 +445,7 @@ class GuangYaApi:
         )
         try:
             children = self._list_children(parent, strict=True)
-        except GuangYaApiError as err:
+        except (GuangYaApiError, GuangYaAuthError) as err:
             raise StorageQueryError(f"查询目标目录失败，无法确认 {normalized}: {err}") from err
         for item in children:
             if item.name == path_obj.name:
@@ -492,11 +506,11 @@ class GuangYaApi:
 
     # ── 删除 / 重命名 / 移动 / 复制 ──
 
-    def _wait_task(self, task_id: str, max_try: int = 40, interval: float = 0.3) -> bool:
+    def _wait_task(self, task_id: str, max_try: int = 40, interval: float = 0.3, confirmed: bool = False) -> bool:
         """
         等待任务完成。
 
-        仅在明确失败时返回 False，超时/查询异常按已受理处理（与原行为一致）。
+        confirmed=True 用于整理移动/复制/删除，超时不能冒充成功。
         """
         task_id = str(task_id or "").strip()
         if not task_id:
@@ -514,20 +528,23 @@ class GuangYaApi:
                 return False
             if index < max_try - 1:
                 time.sleep(interval)
-        logger.warning(f"【光鸭云盘】任务状态未确认（按已受理处理） task_id={task_id}")
-        return True
+        logger.warning(f"【光鸭云盘】任务状态未确认 task_id={task_id}")
+        return not confirmed
 
     def delete(self, fileitem: schemas.FileItem) -> bool:
         """删除文件/目录（任务型）；配置了彻底删除时再从回收站清除。"""
         try:
             file_id = fileitem.fileid or self._path_to_id(str(fileitem.path))
             data = self.client.delete_file([file_id])
-            self._wait_task(data.get("taskId") or "")
             self._invalidate_path_cache(fileitem.path)
+            if not self._wait_task(data.get("taskId") or "", confirmed=True):
+                return False
+            if self.get_item_strict(Path(fileitem.path)) is not None:
+                return False
             if self._permanently_delete:
                 return self._delete_permanently_from_recycle(fileitem)
             return True
-        except (GuangYaApiError, GuangYaAuthError, FileNotFoundError) as err:
+        except (GuangYaApiError, GuangYaAuthError, FileNotFoundError, StorageQueryError) as err:
             logger.debug(f"【光鸭云盘】删除文件失败: {err}")
             return False
 
@@ -546,17 +563,22 @@ class GuangYaApi:
         """复制文件/目录到目标目录（任务型），可选重命名。"""
         try:
             target_parent = Path(path)
+            current_name = fileitem.name or Path(fileitem.path).name
+            if self.get_item_strict(target_parent / current_name):
+                logger.warning(f"【光鸭云盘】复制目标存在原名文件，无法安全确认新副本：{target_parent / current_name}")
+                return False
             target_id = self._path_to_id(target_parent.as_posix())
             file_id = fileitem.fileid or self._path_to_id(str(fileitem.path))
             data = self.client.copy_file([file_id], target_parent_id=target_id or "")
-            self._wait_task(data.get("taskId") or "")
+            if not self._wait_task(data.get("taskId") or "", confirmed=True):
+                return False
             copied = self._wait_item_visible(target_parent, fileitem.name or Path(fileitem.path).name)
             if not copied:
                 return False
             if new_name and new_name != copied.name:
-                return self.rename(copied, new_name)
+                return self._rename_and_confirm(copied, target_parent / new_name)
             return True
-        except (GuangYaApiError, GuangYaAuthError, FileNotFoundError) as err:
+        except (GuangYaApiError, GuangYaAuthError, FileNotFoundError, StorageQueryError) as err:
             logger.debug(f"【光鸭云盘】复制文件异常: {err}")
             return False
 
@@ -570,21 +592,36 @@ class GuangYaApi:
             if target_parent.as_posix() == source_path.parent.as_posix():
                 if target_name == current_name:
                     return True
-                return self.rename(fileitem, target_name)
+                return self._rename_and_confirm(fileitem, target_parent / target_name)
+            if self.get_item_strict(target_parent / current_name):
+                logger.warning(f"【光鸭云盘】移动目标存在原名文件：{target_parent / current_name}")
+                return False
             target_id = self._path_to_id(target_parent.as_posix())
             file_id = fileitem.fileid or self._path_to_id(str(fileitem.path))
             data = self.client.move_file([file_id], target_parent_id=target_id or "")
-            self._wait_task(data.get("taskId") or "")
             self._invalidate_path_cache(fileitem.path)
+            if not self._wait_task(data.get("taskId") or "", confirmed=True):
+                return False
             moved = self._wait_item_visible(target_parent, current_name)
             if not moved:
                 return False
+            if file_id and moved.fileid != file_id:
+                return False
             if target_name != moved.name:
-                return self.rename(moved, target_name)
+                return self._rename_and_confirm(moved, target_parent / target_name)
             return True
-        except (GuangYaApiError, GuangYaAuthError, FileNotFoundError) as err:
+        except (GuangYaApiError, GuangYaAuthError, FileNotFoundError, StorageQueryError) as err:
             logger.debug(f"【光鸭云盘】移动文件异常: {err}")
             return False
+
+    def _rename_and_confirm(self, fileitem: schemas.FileItem, target: Path) -> bool:
+        """整理改名后核对文件 ID，不能把重名条目误认作整理结果。"""
+        if self.get_item_strict(target):
+            return False
+        if not self.rename(fileitem, target.name):
+            return False
+        renamed = self._wait_item_visible(target.parent, target.name)
+        return bool(renamed and renamed.fileid == fileitem.fileid)
 
     def _wait_item_visible(
         self, parent_path: Path, name: str, retry: int = 10, interval: float = 0.5
@@ -593,7 +630,7 @@ class GuangYaApi:
         target_path = Path(parent_path) / name
         for index in range(retry):
             self._invalidate_path_cache(str(target_path))
-            item = self.get_item(target_path)
+            item = self.get_item_strict(target_path)
             if item:
                 return item
             if index < retry - 1:

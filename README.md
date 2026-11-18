@@ -2,9 +2,9 @@
 
 # 光鸭同步 · MoviePilot 插件
 
-**把「光鸭云盘」接入 MoviePilot 存储，在整理完成后联动上传成品文件，并提供手动上传、上传记录与 LitePan 联动。**
+**把「光鸭云盘」接入 MoviePilot 存储，在整理完成后联动上传成品文件，并提供云盘资源整理、手动上传、上传记录与 LitePan 联动。**
 
-[![version](https://img.shields.io/badge/version-1.3.2-blue?style=flat-square)](https://github.com/tardlk/MoviePilot-Plugins/releases)
+[![version](https://img.shields.io/badge/version-1.5.0-blue?style=flat-square)](https://github.com/tardlk/MoviePilot-Plugins/releases)
 [![MoviePilot](https://img.shields.io/badge/MoviePilot-V3-6C63FF?style=flat-square)](https://github.com/jxxghp/MoviePilot)
 [![license](https://img.shields.io/badge/license-GPL--3.0-success?style=flat-square)](LICENSE)
 [![author](https://img.shields.io/badge/author-tardlk-0ea5e9?style=flat-square)](https://github.com/tardlk)
@@ -21,7 +21,7 @@
 | :-- | :-- |
 | 插件 ID | `guangyasync` |
 | 显示名称 | 光鸭同步 |
-| 版本 | v1.3.2 |
+| 版本 | v1.5.0 |
 | 标签 | 存储、工具 |
 | 作者 | [tardlk](https://github.com/tardlk) |
 | 兼容 | MoviePilot **V3**（`system_version: ">=3.0.0"`，不兼容 V2） |
@@ -34,6 +34,7 @@
 
 - **存储接入** — 在 MoviePilot 的「存储」中使用「光鸭同步」，支持列表、上传、下载、删除、重命名、移动、复制、空间用量与快照。
 - **扫码登录** — 光鸭云盘 App 扫码授权，令牌自动持久化与刷新；任何 API 都不返回明文令牌。
+- **云盘资源整理** — 选择光鸭待整理目录与云端目标目录，递归识别资源，按 MoviePilot 命名规则直接在盘内移动或复制；支持只读预览，任务与记录由宿主管理。
 - **整理联动上传** — 订阅 MoviePilot「整理完成」事件，直接读取整理结果与媒体目录信息上传成品文件；无需填写本地路径，不扫描目录、不参与整理。
 - **手动上传** — 在「整理」全页浏览 MoviePilot 主机目录，选择文件或整个文件夹上传，仅超级管理员可用。
 - **上传记录与逐文件进度** — 每个文件的结果（成功 / 跳过 / 失败、大小、远端路径、错误）与实时进度，命中秒传额外标注。
@@ -63,12 +64,28 @@
 ### 使用
 
 - 插件启用后，左侧导航 **「整理」** 分组会出现 **「光鸭同步」** 全页入口，其中包含：
-  **整理联动上传**、**手动上传**、**上传记录**。
+  **云盘资源整理**、**整理联动上传**、**手动上传**、**上传记录**。
 - 插件自身的状态页只保留扫码登录 / 状态信息；**配置**在插件配置页（含 LitePan 联动）。
 
 ---
 
 ## 功能详解
+
+### 云盘资源整理
+
+将网上转存的资源集中到光鸭云盘的一个目录，例如 `/待整理`。在左侧「整理 → 光鸭同步」的「云盘资源整理」卡片中：
+
+1. 浏览选择**待整理目录**，例如 `/待整理`；会递归处理子目录。
+2. 选择或填写**媒体库目标目录**，例如 `/媒体库`。源、目标必须独立，不能相同或互相包含；不能把整个云盘根目录作为源。
+3. 选择**移动**或**复制**，以及自动识别 / 电影 / 电视剧；可按类型、类别建立目录，也可开启元数据刮削。
+4. 点击**预览整理结果**，查看源文件与拟生成的云端路径。预览不会移动、改名或创建云端目录。
+5. 点击**开始整理**，在 MoviePilot 原生**整理队列**与**整理记录**中查看实际进度和结果。
+
+视频文件使用光鸭盘内移动/复制及重命名，不经本地下载再上传。识别、命名模板、覆盖策略、字幕等附加文件处理均使用宿主原生规则；识别失败的资源可在原生整理记录中指定媒体后重试。开启刮削时，宿主会生成并上传元数据文件。
+
+**移动**会将整理成功的文件移出源目录，**复制**会保留源资源。新目标目录只在实际整理时创建。配置过匹配媒体库目录时，宿主会采用该目录的重命名、覆盖等整理策略；此处的选项不会修改全局配置。此功能仅超级管理员可用，与「整理完成后联动上传」开关独立。
+
+云盘查询故障或任务未确认完成时不会记作成功。若目标目录已有同名的**原始资源文件**，为避免云端自动改名后误操作已有条目，本轮会失败并保留记录，请先处理该冲突。当前提供手动触发，不包含定时或监控整理。云盘整理结果在原生记录中查看，不写入插件的上传记录，也不触发上传完成的 LitePan 通知。
 
 ### 整理联动上传
 
@@ -176,6 +193,7 @@ LitePan 自动化规则：cache_clear → strm →（可选 strm_scrape）→ em
 | POST | `/api/v1/plugin/guangyasync/login/logout` | 退出登录 |
 | GET | `/api/v1/plugin/guangyasync/fs/list?path=` | 浏览 MoviePilot 主机目录（仅超级管理员） |
 | GET | `/api/v1/plugin/guangyasync/remote/list?path=` | 浏览光鸭云盘目录（只读，仅返回子目录，供目标目录选择器使用） |
+| POST | `/api/v1/plugin/guangyasync/organize` | 云盘目录整理：`source_dir` / `target_dir`、`transfer_type=move/copy`、`media_type=auto/movie/tv`、`preview`（默认 true）、`library_type_folder` / `library_category_folder` / `scrape`；仅超级管理员 |
 | POST | `/api/v1/plugin/guangyasync/upload` | 手动上传 `{paths, remote_dir}`（仅超级管理员） |
 | GET | `/api/v1/plugin/guangyasync/progress` | 当前上传 / 同步进度 |
 | GET | `/api/v1/plugin/guangyasync/history?limit=` | 上传 / 同步记录 |
@@ -222,6 +240,14 @@ npm run build          # build:web + build:zip，额外生成可上传的 zip
 - 运行时依赖 `oss2` 由 MoviePilot V3 宿主内置提供，插件无需额外声明依赖。
 
 ---
+
+## 验证
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+离线测试覆盖入口参数、只读预览委托、原生队列调用、云端移动/复制改名、任务失败与超时、文件身份、缓存与分页故障。宿主依赖使用替身，实际识别与真实光鸭账号仍需部署后联调。
 
 ## 常见问题
 
@@ -283,3 +309,23 @@ v1.2.0 起这些能力已移除，目录同步页收敛为「整理成功后联�
 本项目遵循 **GPL-3.0** 许可，详见 [`LICENSE`](LICENSE)。
 
 <div align="center"><sub>如果这个插件对你有帮助，欢迎 Star 本项目。</sub></div>
+
+## Telegram 分享转存并整理
+
+在「整理 → 光鸭同步 → 分享转存并整理」保存转存源目录（默认 `/待整理`）和独立的媒体目录（默认 `/Media`）。每个分享存入源目录下的独立任务子目录，再使用 MoviePilot 规则整理；不会扫描源目录中的其他资源。
+
+1. 在 MoviePilot「设定 → 通知」添加 Telegram 通知渠道，填写 BotFather 提供的 Bot Token、你自己的数字 Chat ID，并在用户白名单和管理员白名单中填入自己的数字用户 ID，启用后保存。
+2. 在插件「允许的 Telegram 用户 ID」填写同一个 ID，并开启「接收 Telegram 分享」。
+3. 私聊 Bot 发送一条光鸭分享链接（支持 URL 中的 `code` 和文案中的「提取码」）。开启宿主全局 AI 或发送整段分享文案时，使用 `/guangya <链接> 提取码：xxxx`。
+
+也可以在同一页面手动提交分享，与 Telegram 共用处理队列。配置、手动提交和任务列表接口仅超级管理员可用。插件只接收白名单用户；普通消息仅处理私聊，显式命令结果私信给发起用户。
+
+任务串行执行，最多 20 个待处理任务；按分享 ID 去重，重复链接返回已有任务。提交时冻结目录和整理设置，之后更改配置不会改变既有任务。转存前读取完整分享清单，转存后核对路径、类型及文件大小；确认超时、运行中断或整理结果不明时暂停复核，不自动重复转存。转存前失败的任务可重新发送链接更正提取码；转存后请在原生整理界面手动处理。
+
+自动整理先执行只读预览，识别失败或文件名只有年份导致的可疑识别会保留资源并提示人工确认。常规识别仍取决于 MoviePilot 与媒体资料库；混淆、删减名称可能需要手动指定媒体。没有实际完成回执的任务不会标记为整理完成；跳过、后台重试及人工复核会分别显示。
+
+队列保存在插件数据目录 `share_jobs.json`，文件权限为 `0600`，含分享 ID、提取码与任务配置，不含访问令牌；插件任务接口与主动日志不返回这些凭据；宿主可能记录原始 Telegram 消息，备份和分享宿主日志前请脱敏。最多保留 1000 条去重记录，满额时需先离线归档。空任务目录与未参与整理的说明文件保留在源目录。
+
+客户端共用请求间隔，实际最小间隔为 `max(min_interval, 0.5)` 秒；HTTP 429/业务限流重试会记录日志。此间隔用于减少突发请求，不代表光鸭的风控安全阈值。分享写入不进行限流自动重放。
+
+依赖宿主公开的 `TransferChain.manual_transfer(report_results=...)`，本机 MoviePilot v3.2.6 已验证；旧宿主缺少此参数时会在转存前拒绝任务并提示升级。

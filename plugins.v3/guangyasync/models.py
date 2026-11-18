@@ -9,7 +9,7 @@ MoviePilot V3 要求 `get_api()` 注册的普通 JSON endpoint 使用
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -43,6 +43,15 @@ class PluginConfigData(BaseModel):
     sort_type: int = 1
     min_interval: float = 0.0
     permanently_delete: bool = False
+
+    telegram_enabled: bool = False
+    telegram_user_ids: str = ""
+    share_source_dir: str = "/待整理"
+    share_target_dir: str = "/Media"
+    share_transfer_type: Literal["move", "copy"] = "move"
+    share_scrape: bool = False
+    share_type_folder: bool = True
+    share_category_folder: bool = False
 
     sync_remote_dir: str = "/"
     sync_conflict: str = "skip"
@@ -89,6 +98,15 @@ class PluginConfigPayload(BaseModel):
     sort_type: Optional[int] = None
     min_interval: Optional[float] = None
     permanently_delete: Optional[bool] = None
+
+    telegram_enabled: Optional[bool] = None
+    telegram_user_ids: Optional[str] = None
+    share_source_dir: Optional[str] = None
+    share_target_dir: Optional[str] = None
+    share_transfer_type: Optional[Literal["move", "copy"]] = None
+    share_scrape: Optional[bool] = None
+    share_type_folder: Optional[bool] = None
+    share_category_folder: Optional[bool] = None
 
     sync_remote_dir: Optional[str] = None
     sync_conflict: Optional[str] = None
@@ -153,6 +171,19 @@ class RemoteListData(BaseModel):
     path: str = "/"
     parent: str = ""
     items: List[RemoteDirEntry] = Field(default_factory=list)
+
+
+class OrganizePayload(BaseModel):
+    """选定光鸭云盘目录，交给 MoviePilot 原生整理链识别与整理。"""
+
+    source_dir: str = Field(min_length=1)
+    target_dir: str = Field(min_length=1)
+    transfer_type: Literal["move", "copy"] = "move"
+    media_type: Literal["auto", "movie", "tv"] = "auto"
+    preview: bool = True
+    library_type_folder: bool = True
+    library_category_folder: bool = False
+    scrape: bool = False
 
 
 class UploadPayload(BaseModel):
@@ -223,3 +254,7 @@ class UploadProgressData(BaseModel):
     started_at: float = 0
     updated_at: float = 0
     items: List[UploadProgressItem] = Field(default_factory=list)
+
+
+class ShareSubmitPayload(BaseModel):
+    text: str = Field(min_length=1, max_length=10000)

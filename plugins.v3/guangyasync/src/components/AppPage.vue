@@ -7,7 +7,7 @@
         </div>
         <div class="ap-header__meta">
           <div class="ap-header__title">光鸭同步</div>
-          <div class="ap-header__sub">浏览 MoviePilot 主机文件并上传到光鸭云盘</div>
+          <div class="ap-header__sub">整理光鸭云盘资源，或把服务器文件上传到云盘</div>
         </div>
       </div>
       <div class="ap-header__right">
@@ -23,8 +23,13 @@
     </div>
 
     <v-alert v-if="!status.logged_in" type="warning" variant="tonal" class="ap-alert">
-      未登录光鸭云盘。请先点击右上角「插件页」扫码登录，登录后即可在此上传与同步。
+      未登录光鸭云盘。请先点击右上角「插件页」扫码登录，登录后即可整理云盘资源、上传与同步。
     </v-alert>
+
+    <ShareAutomation v-if="status.logged_in" :api="api" :plugin-id="pluginId" :source-plugin-id="sourcePluginId"
+      :config="fullConfig" @update="onConfigUpdate" />
+
+    <CloudOrganize v-if="status.logged_in" :api="api" :plugin-id="pluginId" :source-plugin-id="sourcePluginId" />
 
     <DirectorySync
       :api="api"
@@ -61,6 +66,8 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import DirectorySync from './DirectorySync.vue'
 import ManualUpload from './ManualUpload.vue'
 import UploadHistory from './UploadHistory.vue'
+import CloudOrganize from './CloudOrganize.vue'
+import ShareAutomation from './ShareAutomation.vue'
 
 const props = defineProps({
   // 宿主注入的实例作用域 API 客户端

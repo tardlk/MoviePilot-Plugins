@@ -81,11 +81,11 @@
         <div class="rdp-current">
           将选择：<strong>{{ currentPath || '/' }}</strong>
         </div>
-        <div class="rdp-hint">也可以直接在输入框里手填新目录，上传时会自动创建。</div>
+        <div class="rdp-hint">{{ hint }}</div>
 
         <div class="rdp-actions">
           <v-btn variant="text" @click="dialog = false">取消</v-btn>
-          <v-btn color="primary" :disabled="loading" @click="choose">选择此目录</v-btn>
+          <v-btn color="primary" :disabled="loading || Boolean(error)" @click="choose">选择此目录</v-btn>
         </div>
       </div>
     </v-dialog>
@@ -103,6 +103,7 @@ const props = defineProps({
   label: { type: String, default: '光鸭目标目录' },
   placeholder: { type: String, default: '/Media' },
   disabled: { type: Boolean, default: false },
+  hint: { type: String, default: '也可以直接在输入框里手填新目录，上传时会自动创建。' },
 })
 
 const emit = defineEmits(['update:modelValue'])

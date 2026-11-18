@@ -7,7 +7,7 @@
 
 ## 0. 一分钟速览
 
-- 这是什么：**MoviePilot V3 插件**，把「光鸭云盘」接入为 MoviePilot（下称 MP）的一种**存储**，并在整理成功后**联动上传成品文件**，另提供**手动上传**、**上传记录/进度**、**LitePan 联动**。
+- 这是什么：**MoviePilot V3 插件**，把「光鸭云盘」接入为 MoviePilot（下称 MP）的一种**存储**，并在整理成功后**联动上传成品文件**，另提供**云盘内资源整理**、**手动上传**、**上传记录/进度**、**LitePan 联动**。
 - 插件 ID / 主类 / 存储名 / 配置前缀：`guangyasync` / `guangyasync` / `guangyasync`（`_disk_name`）/ `guangyasync_`。
 - 显示名称：**光鸭同步**（见 `guangyasync._display_name`）；v1.3.0 起显示名与技术 ID 一并定稿，**不兼容早期插件 ID 的安装**（旧实例需卸载重装并重新扫码，配置不迁移）。
 - 仓库：`git@github.com:tardlk/MoviePilot-Plugins.git`（分支 `main`）。
@@ -33,12 +33,13 @@ MoviePilot-Plugins/
     ├── __init__.py               # 主类 guangyasync：生命周期/配置/API/存储契约/整理联动/上传/进度/事件
     ├── guangya_client.py         # 传输层 GuangYaClient：请求头、错误码、token 刷新、限流、设备码登录、上传票据、OSS 分片
     ├── guangya_api.py            # 存储层 GuangYaApi：分页列举、get_item(_strict)、任务型增删改、上传/秒传、usage/snapshot、缓存
+    ├── cloud_organizer.py        # 云盘目录校验与宿主公开手动整理入口
     ├── models.py                 # get_api() 的 Pydantic 请求/响应模型
     ├── index.html / vite.config.js / package.json / package-lock.json
     ├── build-zip.js              # 本地打包可上传安装的 zip
     ├── src/                      # 前端源码
     │   ├── main.js / App.vue
-    │   └── components/{Page,Config,AppPage,DirectorySync,ManualUpload,UploadHistory,RemoteDirPicker}.vue
+    │   └── components/{Page,Config,AppPage,DirectorySync,CloudOrganize,ManualUpload,UploadHistory,RemoteDirPicker}.vue
     ├── dist/                     # 前端构建产物（提交）
     └── README.md                 # 插件目录专属说明
 ```
@@ -58,11 +59,11 @@ MoviePilot-Plugins/
 ### 2.1 存储 = 模块方法契约
 
 MP 通过 `get_module()` 暴露的方法调用插件存储能力（契约见 MP 源码 `app/runtime/extensions/module/contracts.py`）。
-本插件在 `guangyasync.get_module()` 暴露 16 个方法：
+本插件在 `guangyasync.get_module()` 暴露 17 个方法：
 
 ```
 list_files, any_files, download_file, upload_file, delete_file, rename_file,
-get_file_item, get_parent_item, snapshot_storage, storage_usage,
+get_file_item, get_file_item_strict, get_parent_item, snapshot_storage, storage_usage,
 support_transtype, storage_manage, create_folder, get_folder, exists, get_item
 ```
 
@@ -73,7 +74,7 @@ support_transtype, storage_manage, create_folder, get_folder, exists, get_item
 - 属于本存储但无法处理（未登录等）→ 返回该方法的失败语义（列表 `[]` / 布尔 `False` / 对象 `None`）并记日志；
 - 否则真实故障会被分派器误判为「该存储不具备此能力」，落到宿主 `FileManagerModule` 报「不支持的存储类型」，掩盖真因。
 
-⚠️ 已知瑕疵：`exists()` 未做归属判断，非本存储会返回 `False` 而非 `None`（见 §8 TODO）。
+`exists()` 已做存储归属判断，非本存储返回 `None`。`get_file_item_strict()` 用宿主 `FileItemQueryResult(item=...)` 区分“不属于本存储”和“已确认不存在”；未登录或查询故障抛 `StorageQueryError`。旧宿主没有该回执类型时让路。
 
 ### 2.2 存储注册（两处必须同时存在）
 
@@ -125,6 +126,7 @@ def transfer_complete(self, event): ...
 | POST | `/login/logout` | 退出登录 |
 | GET | `/fs/list?path=` | 浏览 MP 主机目录（**超级管理员**，受 `fs_allowed_roots` 约束） |
 | GET | `/remote/list?path=` | 浏览光鸭云盘目录（**只读**，仅返回子目录；供「光鸭目标目录」选择器使用，`auth: bear`） |
+| POST | `/organize` | 云盘目录整理 / 只读预览（**超级管理员**，委托宿主原生整理队列） |
 | POST | `/upload` | 手动上传 `{paths, remote_dir}`（**超级管理员**，后台线程，不删源文件） |
 | GET | `/progress` | 当前上传/同步进度（含逐文件 items） |
 | GET | `/history?limit=` | 上传/同步记录 |
@@ -226,7 +228,6 @@ v1.2.0 起移除了实时目录监控、强制轮询、Cron 定时与全量同�
 ---
 
 ## 7. 排错手册（真实踩过的坑）
-## 7. 排错手册（真实踩过的坑）
 
 | 现象 | 根因 | 处理 |
 |---|---|---|
@@ -248,12 +249,11 @@ v1.2.0 起移除了实时目录监控、强制轮询、Cron 定时与全量同�
 
 ## 8. 已知限制 / TODO
 
-- `exists()` 未做归属让路（非本存储返回 `False` 而非 `None`），与文件头约定不一致，建议修。
 - `GET /config` 每次都实时请求光鸭 API 拉账户统计（状态页/前端刷新会触发）。
-- 未实现 `media_files`、`transfer`、`plan_transfer`/`execute_transfer_plan` 等整理计划内部接口。
+- 未实现 `media_files`；云盘整理使用宿主公开 `TransferChain.manual_transfer()` 与 `StorageOperSelection` 注入，**不得实现**当前宿主标记为 `public_to_plugins=False` 的 `plan_transfer` / `execute_transfer_plan` 私有模块能力。
 - 进度 `self._progress` 存内存，重载即清空；上传**记录**每处理完一个文件即写盘（`save_data("upload_history")`，上限 500 条，`_history_lock` 保护）。
 - 整理联动待上传队列持久化在 `save_data("transfer_pending")`：`_schedule_transfer_upload` 写全量，上传线程每完成一个文件调 `_drop_transfer_pending` 删对应条目，`init_plugin` 调 `_restore_transfer_pending()` 过滤已消失的本地文件后重排 Timer（延迟 3 秒）。因此进程在去抖窗口或上传途中退出时，未完成文件会在重启后自动补传；读取队列遇到瞬时数据库故障会按 10 秒间隔最多重试 2 次（队列保留不丢）。`stop_service()` 只派发队列、不再清空。
-- 插件不重命名媒体文件：上传的是整理链产出的成品路径，按相对路径原样落到云端。
+- 上传入口不重命名媒体文件。云盘资源整理的命名由宿主规划，插件适配器执行盘内移动/复制及改名。
 - 大文件上传后光鸭列表索引有分钟级延迟，OSS 成功只做短等待即按「已上传」记录，最终一致。
 - `/fs/list` 浏览的是 **MP 容器内可见路径**，不是 NAS 全盘。
 
@@ -268,11 +268,10 @@ v1.2.0 是破坏性变更：实时目录监控（含绿联 UGOS 高级 ACL 的 i
 ---
 
 ## 9. 安全
-## 9. 安全
 
 - 不提交任何密钥；文档/脚本用占位符。
 - token 只由扫码登录流程写入；`_merge_config()` 忽略客户端提交的 token；任何 API 不返回明文 token/API Key。
-- `/fs/list`、`/upload` 依赖 `get_current_active_superuser`，仅超级管理员；
+- `/fs/list`、`/upload`、`/organize` 依赖 `get_current_active_superuser`，仅超级管理员；
   `fs_allowed_roots` 非空时路径必须落在允许根目录内（`_is_path_allowed`）。
 - 新增日志/错误处理避免输出完整 token（`GuangYaClient.mask_token`）。
 
@@ -311,7 +310,8 @@ npm run build          # build:web + build:zip（额外生成可上传的 zip）
 
 ```bash
 python3 -m py_compile plugins.v3/guangyasync/__init__.py plugins.v3/guangyasync/*.py
-node --check <打包脚本转 .mjs>
+node --check plugins.v3/guangyasync/build-zip.js
+python3 -m unittest discover -s tests -v
 ```
 
 ---
@@ -375,3 +375,44 @@ curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/jso
 
 官方文档（`jxxghp/MoviePilot-Plugins` 仓库）：`docs/Plugin_Development.md`、`docs/Repository_Guide.md`、
 `docs/V3_Plugin_Adaptation.md`、`docs/V3_API_Response_Adaptation.md`。
+
+
+## 13. 云盘资源整理（v1.4.0）
+
+- 全页 `CloudOrganize.vue` 选择待整理与目标云盘目录，可先预览再手动提交；不是自动目录监控。
+- `POST /organize`：`OrganizePayload`（`source_dir` / `target_dir`、`transfer_type=move/copy`、`media_type=auto/movie/tv`、`preview=true` 默认、`library_type_folder=true`、`library_category_folder=false`、`scrape=false`）。仅超级管理员，要求启用且已登录。
+- `cloud_organizer.organize_paths()` 拒绝根目录源、非绝对路径、`..`、反斜杠以及源/目标相同或互相包含。只读确认源为目录、目标不是文件；目标可不存在。
+- `organize_cloud_directory()` 调用稳定公开入口 `app.chain.transfer.TransferChain.manual_transfer()`；源/目标均为 `guangyasync`，预览 `preview=True, background=False`；执行 `preview=False, background=True`。保留附加文件处理，不传 `force`、不绕过宿主覆盖策略。识别、命名、任务、重试、历史由宿主负责。
+- 适配依据：`jxxghp/MoviePilot` 的 `v3` 分支，核对提交 `7a030f5b21931b5e21ee5d84f03db6053f3b1694`。宿主通过 `StorageOperSelection` 获取源/目标适配器，`FileManagerModule` 调 `TransHandler` 做计划和执行；不注册任何私有计划模块方法。
+- 视频在盘内移动/复制，无本地下载上传；开启刮削时宿主可生成并上传 NFO/图片。
+- `get_item_strict()` / `list_strict()` 绕过缓存并完整分页，失败或分页截断抛错；`list_files()` 与云端目录选择器使用严格列举。普通按名查询仍可使用缓存。
+- 移动/复制任务必须确认完成，改名后核对文件 ID。目标目录若已存在源文件的原始名称，先拒绝本次操作，避免光鸭自动重命名后误操作既有文件；同目录改名支持，复制到同目录则拒绝。
+- 原生队列接收不代表整理已完成。UI 不使用插件上传进度/记录显示整理结果，也不触发上传完成的 LitePan 通知；原生记录中处理识别失败和重试。
+- 离线 `unittest` 使用宿主依赖替身与内存云盘验证入口契约和真实存储编排，不替代实际 MoviePilot/光鸭账号联调。
+
+
+## 14. 本机开发部署历史（2026-11-16，当前已停用）
+
+- macOS arm64，以官方本地源码模式部署；不是 Docker。
+- 宿主目录：`<MoviePilot源码目录>`；后端 v3.2.6，配套前端 v3.2.7。
+- 前端 `http://127.0.0.1:3000`，后端 `http://127.0.0.1:3001`。
+- 管理命令：`moviepilot {start,stop,restart,status}`；未注册开机自启。
+- 配置/数据库/日志：`<MoviePilot私有配置目录>`；账号凭据只存在该目录的权限 600 文件，不写入仓库。
+- `PLUGIN_LOCAL_REPO_PATHS` 指向当前插件仓库。通过宿主本地来源安装 `guangyasync` v1.4.0，已启用，运行态 `active`；运行副本位于宿主 `app/plugins/guangyasync`。
+- 已验证真实宿主加载、侧栏注册、整理端点登录保护，以及经资源 Cookie 认证后的联邦入口与 AppPage 文件服务。光鸭账号尚未扫码，未操作真实云盘文件。
+- 原版 `uv.lock` 未改动；PyPI 网络受限时从原锁导出运行需求，以 `uv pip sync --require-hashes` 经可用镜像安装并核对 173 个运行包版本。前端、站点资源、CJK 与浏览器内核均按官方安装组件准备。
+- 2026-11-17 已停止本机 MP 前后端及其 Telegram 通道，Bot 交由独立的 [GYSYNC](https://github.com/tardlk/GYSYNC) 服务运行。发布插件无需启动旧宿主；再次联调时先协调 Bot 归属，避免同一 Bot 被两个程序同时轮询。原宿主配置保留。
+
+
+## 15. Telegram 分享自动化（v1.5.0）
+
+- `share_tasks.py`：固定域名链接解析、白名单、完整分享清单、严格建目录、转存后清单核对、原子私有 JSON 队列与跨进程文件锁。导入时不访问云盘、不启动线程。
+- `__init__.py`：UserMessage / PluginAction 事件桥接与 `/guangya` 命令，复用宿主 Telegram 通知实例 source。只允许配置中的数字用户 ID；普通消息仅接收私聊，回复始终指定 userid，不广播。全局 AI 可能先消费普通消息，显式命令可绕过。
+- `ShareAutomation.vue`：目录设置、Telegram 白名单、手动分享提交、轮询任务记录。`/share/submit`、`/share/jobs` 与保存配置均需超级管理员。
+- 分享配置集中在 `share_tasks.DEFAULTS`，通过 `_share_config` 纳入默认/完整/合并/脱敏模型，修改时勿遗漏 `models.py`。
+- `ShareQueue` 文件：插件数据目录的 `share_jobs.json` (0600)、事务锁、worker 锁。先落盘 saving 再写转存；写入结果不明/重启中断不重放，saved 可继续整理。分享 accessToken 不落盘。API 只投影脱敏字段。转存前失败可通过重发链接改码重试，其他状态按 share ID 去重。
+- 每任务冻结目录设置；只整理 `share_source_dir/<job-id>`。完整核对所有路径、类型、大小后才调用公开 `TransferChain.manual_transfer()`。先 preview 校验识别，再同步执行并请求 report_results；仅全部 completed 时报告完成。预览异常/仅年份标题疑似误识别时暂停人工复核。不得把 accepted/retry_wait 当 completed，不得注册宿主私有 plan/execute 接口。
+- `RequestGate` 在同一插件实例重建客户端后保留；实际请求间隔至少 0.5 秒，429/354 重试写日志。分享 restore_share 不做限流重放。
+- `tests/test_share_tasks.py` 为离线编排测试；本机已用用户提供的分享联调转存并整理。实测遇到年份型混淆文件名被宿主误识别，维护过程已把测试成品按文件 ID 还原到任务目录，任务保留为 needs_review，不能把该测试报为正确媒体识别成功。用户分享链接/提取码不写入文档或测试。
+
+- 本机 Telegram 通知渠道已配对启用，插件接收开关与数字用户白名单已保存；私有 Bot Token 只在宿主 Notifications 配置中，禁止写入仓库。实际纯链接消息已到达 UserMessage 并命中分享去重；通知使用 `MessageType.Plugin`、`private_delivery=True` 和 `parse_mode="plain"`。宿主日志会记录原始传入消息（可能含提取码），对外分享日志需脱敏。

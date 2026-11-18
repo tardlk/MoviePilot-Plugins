@@ -38,6 +38,23 @@ class GuangYaApiError(Exception):
         self.code = code
 
 
+class RequestGate:
+    """同一插件实例的客户端重建后仍共用的请求节流器。"""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.interval = 0.0
+        self.last_request = 0.0
+
+    def wait(self):
+        """按单调时钟串行分配请求开始时间，不把文件耗时当作请求间隔。"""
+        with self.lock:
+            delay = self.interval - (time.monotonic() - self.last_request)
+            if delay > 0:
+                time.sleep(delay)
+            self.last_request = time.monotonic()
+
+
 class GuangYaClient:
     """
     光鸭云盘 HTTP 客户端。
@@ -79,6 +96,7 @@ class GuangYaClient:
         device_id: str = None,
         on_token_refresh: Callable[[str, str], None] = None,
         min_interval: float = 0.0,
+        request_gate: Optional[RequestGate] = None,
     ):
         """
         初始化客户端。
@@ -91,6 +109,7 @@ class GuangYaClient:
         self._device_id = self._normalize_device_id(device_id) or self._generate_device_id()
         self._on_token_refresh = on_token_refresh
         self._min_interval = max(float(min_interval or 0.0), 0.0)
+        self._request_gate = request_gate
         self._last_request_at = 0.0
         self._token_lock = threading.RLock()
         self._request_lock = threading.Lock()
@@ -179,6 +198,9 @@ class GuangYaClient:
 
     def _throttle(self) -> None:
         """按 min_interval 控制两次请求的最小间隔。"""
+        if self._request_gate is not None:
+            self._request_gate.wait()
+            return
         if self._min_interval <= 0:
             return
         with self._request_lock:
@@ -264,6 +286,7 @@ class GuangYaClient:
             raise GuangYaAuthError(f"认证失效: HTTP {status}")
 
         if status == self._HTTP_RATE_LIMIT and retry_rate:
+            logger.warning("【光鸭同步】云盘返回 HTTP 429，暂停后仅重试一次")
             time.sleep(2.0)
             return self._request_raw(
                 method, url, data=data, auth=auth,
@@ -332,6 +355,7 @@ class GuangYaClient:
         if code in allow_codes:
             return envelope
         if code in self._RATE_LIMIT_CODES and retry_rate:
+            logger.warning("【光鸭同步】云盘返回业务限流码 354，暂停后仅重试一次")
             time.sleep(1.5)
             return self._request_envelope(method, url, data=data, allow_codes=allow_codes, retry_rate=False)
         if self._is_success_code(envelope):
@@ -365,6 +389,33 @@ class GuangYaClient:
         )
 
     # ── 登录 / 令牌 ──
+
+    def share_access(self, share_id: str, code: str) -> Dict[str, Any]:
+        """读取分享访问令牌；仅请求固定的光鸭接口，不访问消息中的任意 URL。"""
+        envelope = self._request_raw("POST", self.API_BASE_URL + "/userres/v1/get_share_access_token",
+                                     data={"shareId": share_id, "code": code}, auth=False)
+        if not self._is_success_code(envelope):
+            raise GuangYaApiError(str(envelope.get("msg") or "分享不可用或提取码错误"))
+        return envelope.get("data") or {}
+
+    def share_files(self, token: str, parent_id: str = "", page: int = 1) -> Any:
+        """读取分享的一页条目，分页由分享服务完整校验。"""
+        envelope = self._request_raw("POST", self.API_BASE_URL + "/userres/v1/get_share_page_files_list",
+                                     data={"accessToken": token, "parentId": parent_id, "page": page,
+                                           "pageSize": 100, "orderBy": 0, "sortType": 0}, auth=False)
+        if not self._is_success_code(envelope):
+            raise GuangYaApiError(str(envelope.get("msg") or "读取分享失败"))
+        return envelope.get("data") or {}
+
+    def restore_share(self, token: str, file_ids: List[str], parent_id: str) -> Dict[str, Any]:
+        """转存所选分享根条目；写请求不因业务失败盲目重放。"""
+        envelope = self._request_envelope("POST", self.API_BASE_URL + "/userres/v1/restore_share",
+                                          data={"accessToken": token, "fileIds": file_ids,
+                                                "parentId": parent_id or ""}, retry_rate=False)
+        data = envelope.get("data") or {}
+        if isinstance(data, str):
+            return {"taskId": data}
+        return data if isinstance(data, dict) else {}
 
     def get_device_code(self) -> Optional[Dict[str, Any]]:
         """获取设备码与二维码；失败返回 None。"""
